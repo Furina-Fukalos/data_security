@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据安全管理评估系统</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="template.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f0f2f5; color: #333; }
+.header { background: linear-gradient(135deg, #1a237e 0%, #283593 100%); color: white; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.header h1 { font-size: 20px; font-weight: 600; }
+.header .subtitle { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+.btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: #1a237e; color: white; }
+.btn-primary:hover { background: #283593; }
+.btn-success { background: #2e7d32; color: white; }
+.btn-success:hover { background: #388e3c; }
+.btn-danger { background: #c62828; color: white; }
+.btn-danger:hover { background: #d32f2f; }
+.btn-default { background: #e0e0e0; color: #333; }
+.btn-default:hover { background: #bdbdbd; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 16px; overflow: hidden; }
+.card-header { padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.card-header h3 { font-size: 16px; font-weight: 600; }
+.card-body { padding: 20px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }
+.stat-card .stat-value { font-size: 32px; font-weight: 700; color: #1a237e; }
+.stat-card .stat-label { font-size: 13px; color: #666; margin-top: 4px; }
+.stat-card .stat-success { color: #2e7d32; }
+.stat-card .stat-warn { color: #ed6c02; }
+.stat-card .stat-danger { color: #c62828; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; }
+th { background: #f5f5f5; font-weight: 600; font-size: 13px; color: #555; }
+td { font-size: 13px; }
+tr:hover { background: #f9f9f9; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+.modal { background: white; border-radius: 8px; width: 520px; max-width: 90%; max-height: 90vh; overflow-y: auto; }
+.modal-header { padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { font-size: 16px; }
+.modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #999; }
+.modal-body { padding: 20px; }
+.modal-footer { padding: 16px 20px; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 8px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; color: #555; }
+.form-group input, .form-group textarea, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; font-family: inherit; }
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: #1a237e; box-shadow: 0 0 0 2px rgba(26,35,126,0.1); }
+.progress-bar { background: #e0e0e0; border-radius: 10px; height: 8px; overflow: hidden; }
+.progress-bar .fill { height: 100%; border-radius: 10px; transition: width 0.3s; }
+.progress-fill-success { background: #2e7d32; }
+.progress-fill-warn { background: #ed6c02; }
+.progress-fill-danger { background: #c62828; }
+.tree-l1 { background: linear-gradient(90deg, #e8eaf6, #f3e5f5); padding: 12px 16px; font-weight: 600; font-size: 15px; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.tree-l2 { background: #f3e5f5; padding: 10px 14px; font-weight: 500; border-radius: 5px; margin: 8px 0 4px 24px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.tree-l3 { background: #e3f2fd; padding: 8px 12px; border-radius: 4px; margin: 4px 0 4px 48px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.tree-l3.active { background: #bbdefb; }
+.tree-items { margin: 4px 0 12px 72px; }
+.tree-item { padding: 10px 14px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 8px; }
+.tree-item .guidance { font-size: 13px; color: #333; line-height: 1.6; margin-bottom: 8px; }
+.tree-item .applicable { font-size: 12px; color: #9c27b0; margin-bottom: 8px; padding: 4px 8px; background: #f8fbff; border-radius: 3px; display: inline-block; }
+.tree-item .item-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.tree-item select { padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; background: white; cursor: pointer; }
+.tree-item textarea { width: 100%; min-height: 55px; resize: vertical; margin-top: 8px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; margin-left: 4px; }
+.badge-success { background: #e8f5e9; color: #2e7d32; }
+.badge-warn { background: #fff3e0; color: #ed6c02; }
+.badge-danger { background: #ffebee; color: #c62828; }
+#chart { width: 100%; height: 320px; }
+.batch-btn { background: #e8eaf6; border: 1px solid #c5cae9; color: #3949ab; padding: 2px 8px; border-radius: 3px; font-size: 11px; cursor: pointer; margin-left: 4px; transition: all 0.15s; }
+.batch-btn:hover { background: #c5cae9; }
+.tree-l1 .btn { padding: 3px 8px; font-size: 11px; margin-left: 4px; }
+.tree-l2 .btn { padding: 2px 6px; font-size: 11px; }
+.tree-l3 .btn { padding: 1px 5px; font-size: 10px; }
+.chart-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.chart-tab { padding: 6px 14px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font-size: 13px; background: white; }
+.chart-tab.active { background: #1a237e; color: white; border-color: #1a237e; }
+.progress-ring { display: flex; justify-content: center; align-items: center; }
+.stat-ring { text-align: center; }
+.stat-ring svg { width: 80px; height: 80px; }
+.stat-ring .ring-value { font-size: 20px; font-weight: 700; }
+.stat-ring .ring-label { font-size: 12px; color: #666; margin-top: 4px; }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 0; flex-wrap: wrap; align-items: center; }
+.filter-bar label { font-size: 13px; color: #666; }
+.filter-bar select { padding: 7px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; background: white; }
+.search-box { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-bottom: 16px; }
+.search-box:focus { outline: none; border-color: #1a237e; }
+.empty-state { text-align: center; padding: 60px 20px; color: #999; }
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.back-btn { background: none; border: none; cursor: pointer; color: #1a237e; font-size: 14px; margin-right: 16px; padding: 4px 8px; }
+.back-btn:hover { text-decoration: underline; }
+.result符合 { color: #2e7d32; font-weight: 600; }
+.result不符合 { color: #c62828; font-weight: 600; }
+.result部分符合 { color: #ed6c02; font-weight: 600; }
+@media (max-width: 768px) {
+    .header { flex-direction: column; gap: 8px; text-align: center; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .container { padding: 12px; }
+    .tree-items { margin-left: 16px; }
+    .tree-l2 { margin-left: 8px; }
+    .tree-l3 { margin-left: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📋 数据安全管理评估系统</h1>
+    <div class="subtitle">Data Security Management Evaluation System</div>
+  </div>
+  <div>
+    <button class="btn btn-primary" onclick="showCreateProjectModal()">+ 新建评估项目</button>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Dashboard View -->
+  <div id="dashboardView">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="statProjects">0</div>
+        <div class="stat-label">评估项目数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-success" id="statCompleted">0</div>
+        <div class="stat-label">已完成评估</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-warn" id="statInProgress">0</div>
+        <div class="stat-label">评估进行中</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="statIndicators">477</div>
+        <div class="stat-label">评估指标总数</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>📊 评估项目列表</h3>
+      </div>
+      <div class="card-body">
+        <input type="text" class="search-box" id="searchBox" placeholder="🔍 搜索项目名称或评估对象..." oninput="renderProjectList()">
+        <div id="projectList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project View -->
+  <div id="projectView" style="display:none;">
+    <div style="margin-bottom:16px;">
+      <button class="back-btn" onclick="backToDashboard()">← 返回项目列表</button>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header">
+        <h3 id="projectTitle">项目详情</h3>
+        <div>
+          <button class="btn btn-default btn-sm" onclick="exportProjectToExcel()">📥 导出Excel</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCurrentProject()" style="margin-left:8px;">🗑 删除项目</button>
+        </div>
+      </div>
+      <div class="card-body" id="projectInfo"></div>
+    </div>
+
+    <div class="stats-grid" id="projectStats"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>📈 评估进度可视化</h3>
+      </div>
+      <div class="card-body">
+        <div class="chart-tabs">
+          <div class="chart-tab active" onclick="switchChartType('bar')">📊 柱状图</div>
+          <div class="chart-tab" onclick="switchChartType('radar')">🕸️ 雷达图</div>
+          <div class="chart-tab" onclick="switchChartType('pie')">🥧 饼图</div>
+        </div>
+        <div id="chart"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>📝 评估指标填写</h3>
+      </div>
+      <div class="card-body">
+        <div class="filter-bar" style="margin-bottom:16px;">
+          <label>筛选:</label>
+          <select id="filterL1" onchange="renderTree()">
+            <option value="">全部一级指标</option>
+          </select>
+          <select id="filterResult" onchange="renderTree()">
+            <option value="">全部判定结果</option>
+            <option value="符合">✅ 符合</option>
+            <option value="部分符合">⚠️ 部分符合</option>
+            <option value="不符合">❌ 不符合</option>
+            <option value="未评估">未评估</option>
+          </select>
+          <select id="filterApplicable" onchange="renderTree()">
+            <option value="">适用对象筛选</option>
+            <option value="重要数据和核心数据处理者">重要数据和核心数据处理者</option>
+            <option value="被评估对象使用云计算服务时">使用云计算服务</option>
+            <option value="被评估对象是云计算服务提供者时">是云计算服务提供者</option>
+            <option value="涉及政务部门">涉及政务部门</option>
+          </select>
+          <input type="text" id="itemSearch" placeholder="搜索评估指引内容..." style="padding:7px 12px;border:1px solid #ddd;border-radius:4px;font-size:13px;width:250px;" oninput="renderTree()">
+        </div>
+        <div id="treeContainer"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Project Modal -->
+<div class="modal-overlay" id="createProjectModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>创建评估项目</h3>
+      <button class="modal-close" onclick="hideCreateProjectModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>项目名称 *</label>
+        <input type="text" id="projectName" placeholder="例如：XX公司2024年度数据安全评估">
+      </div>
+      <div class="form-group">
+        <label>评估对象 *</label>
+        <input type="text" id="projectTarget" placeholder="例如：XX科技有限公司">
+      </div>
+      <div class="form-group">
+        <label>评估人员</label>
+        <input type="text" id="projectEvaluator" placeholder="评估人员姓名">
+      </div>
+      <div class="form-group">
+        <label>评估日期</label>
+        <input type="date" id="projectDate">
+      </div>
+      <div class="form-group">
+        <label>项目描述</label>
+        <textarea id="projectDesc" rows="3" placeholder="项目描述（可选）"></textarea>
+      </div>
+      <div class="form-group">
+        <label>适用对象预设筛选</label>
+        <select id="projectApplicable">
+          <option value="">全部适用对象</option>
+          <option value="重要数据和核心数据处理者">重要数据和核心数据处理者</option>
+          <option value="被评估对象使用云计算服务时">使用云计算服务</option>
+          <option value="被评估对象是云计算服务提供者时">是云计算服务提供者</option>
+          <option value="涉及政务部门">涉及政务部门</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-default" onclick="hideCreateProjectModal()">取消</button>
+      <button class="btn btn-primary" onclick="createProject()">创建项目</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
