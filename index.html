@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>数据安全管理评估系统</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="xlsx-js-style.min.js"></script>
+<script src="echarts.min.js"></script>
 <script src="template.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -110,9 +110,12 @@ tr:hover { background: #f9f9f9; }
 <body>
 
 <div class="header">
-  <div>
-    <h1>📋 数据安全管理评估系统</h1>
-    <div class="subtitle">Data Security Management Evaluation System</div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <img src="logo1-default.png" alt="Logo" style="height:48px;width:auto;" />
+    <div>
+      <h1>数据安全管理评估系统</h1>
+      <div class="subtitle">Data Security Management Evaluation System</div>
+    </div>
   </div>
   <div>
     <button class="btn btn-primary" onclick="showCreateProjectModal()">+ 新建评估项目</button>
@@ -147,6 +150,13 @@ tr:hover { background: #f9f9f9; }
       </div>
       <div class="card-body">
         <input type="text" class="search-box" id="searchBox" placeholder="🔍 搜索项目名称或评估对象..." oninput="renderProjectList()">
+        <div id="batchToolbar" style="display:none;margin-bottom:12px;padding:10px 14px;background:#e8eaf6;border-radius:6px;border:1px solid #c5cae9;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:13px;color:#3949ab;font-weight:600;">已选中 <span id="selectedCount">0</span> 个项目</span>
+          <button class="btn btn-sm" style="background:#3949ab;color:white;" onclick="batchDeleteProjects()">🗑 批量删除</button>
+          <button class="btn btn-sm" style="background:#2e7d32;color:white;" onclick="batchExportExcel()">📥 批量导出Excel</button>
+          <button class="btn btn-sm" style="background:#ed6c02;color:white;" onclick="batchExportJSON()">📦 批量备份JSON</button>
+          <button class="btn btn-sm btn-default" onclick="clearSelection()">取消选择</button>
+        </div>
         <div id="projectList"></div>
       </div>
     </div>
