@@ -71,7 +71,8 @@ tr:hover { background: #f9f9f9; }
 .badge-success { background: #e8f5e9; color: #2e7d32; }
 .badge-warn { background: #fff3e0; color: #ed6c02; }
 .badge-danger { background: #ffebee; color: #c62828; }
-#chart { width: 100%; height: 320px; }
+#chart { width: 100%; height: 380px; }
+#chart.radar-chart { min-height: 420px; height: auto; }
 .batch-btn { background: #e8eaf6; border: 1px solid #c5cae9; color: #3949ab; padding: 2px 8px; border-radius: 3px; font-size: 11px; cursor: pointer; margin-left: 4px; transition: all 0.15s; }
 .batch-btn:hover { background: #c5cae9; }
 .tree-l1 .btn { padding: 3px 8px; font-size: 11px; margin-left: 4px; }
@@ -180,6 +181,17 @@ tr:hover { background: #f9f9f9; }
     </div>
 
     <div class="stats-grid" id="projectStats"></div>
+
+    <div class="card" id="scoreCard" style="display:none;">
+      <div class="card-header">
+        <h3>🏆 评估评分结果</h3>
+        <div>
+          <button class="btn btn-primary btn-sm" onclick="generateFinalScore()">📊 生成评分</button>
+          <button class="btn btn-default btn-sm" onclick="exportScoreReport()" style="margin-left:8px;">📋 导出报告</button>
+        </div>
+      </div>
+      <div class="card-body" id="scoreResult"></div>
+    </div>
 
     <div class="card">
       <div class="card-header">

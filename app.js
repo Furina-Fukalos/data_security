@@ -343,6 +343,9 @@ function openProject(id) {
             try { renderChart(project, 'bar'); } catch(e) { console.error('图表渲染失败:', e); }
         }, 100);
         
+        // Show score card
+        generateFinalScore();
+        
         // Render tree
         renderTree();
     } catch (err) {
@@ -399,9 +402,345 @@ function renderProjectStats(project) {
     `;
 }
 
+function generateFinalScore() {
+    const project = getProject(currentProjectId);
+    if (!project) return;
+    
+    const items = project.items;
+    let X = 0, Y = 0, Z = 0;
+    
+    Object.values(items).forEach(item => {
+        if (item.result === '符合') X++;
+        else if (item.result === '部分符合') Y++;
+        else if (item.result === '不符合') Z++;
+    });
+    
+    const total = X + Y + Z;
+    const hasUnassessed = Object.values(items).some(i => !i.result);
+    
+    // Overall score: 100 * (X + 0.5Y) / (X + Y + Z)
+    const overallScore = total > 0 ? Math.round(100 * (X + 0.5 * Y) / total) : 0;
+    const passThreshold = 80;
+    const overallResult = overallScore >= passThreshold ? '通过' : '不通过';
+    
+    // Per-L1 scores
+    const l1Data = {};
+    TEMPLATE.forEach((tpl, idx) => {
+        if (!l1Data[tpl.l1]) l1Data[tpl.l1] = { X: 0, Y: 0, Z: 0, total: 0 };
+        l1Data[tpl.l1].total++;
+        const item = items[idx];
+        if (item) {
+            if (item.result === '符合') l1Data[tpl.l1].X++;
+            else if (item.result === '部分符合') l1Data[tpl.l1].Y++;
+            else if (item.result === '不符合') l1Data[tpl.l1].Z++;
+        }
+    });
+    
+    const l1Scores = {};
+    Object.entries(l1Data).forEach(([l1, d]) => {
+        const score = d.total > 0 ? Math.round(100 * (d.X + 0.5 * d.Y) / d.total) : 0;
+        l1Scores[l1] = {
+            score: score,
+            X: d.X, Y: d.Y, Z: d.Z, total: d.total,
+            result: score >= passThreshold ? '通过' : '不通过'
+        };
+    });
+    
+    // Generate improvement suggestions
+    const suggestions = generateSuggestions(l1Scores, overallScore, project);
+    
+    // Render score card
+    const scoreCard = document.getElementById('scoreCard');
+    const scoreResult = document.getElementById('scoreResult');
+    scoreCard.style.display = 'block';
+    
+    let l1ScoreHtml = '';
+    Object.entries(l1Scores).forEach(([l1, data]) => {
+        const shortName = l1.replace(/^[一二三四五六七八九十]+、/, '');
+        const scoreColor = data.score >= 80 ? '#2e7d32' : (data.score >= 60 ? '#ed6c02' : '#c62828');
+        const progressColor = data.score >= 80 ? '#2e7d32' : (data.score >= 60 ? '#ed6c02' : '#c62828');
+        const resultBadge = data.result === '通过' 
+            ? '<span class="badge badge-success">✓ 通过</span>' 
+            : '<span class="badge badge-danger">✗ 不通过</span>';
+        
+        l1ScoreHtml += `
+            <div class="l1-score-item" style="padding:12px 16px;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:10px;background:#fafafa;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <strong style="font-size:14px;">${escapeHtml(shortName)}</strong>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        ${resultBadge}
+                        <span style="font-size:20px;font-weight:700;color:${scoreColor};">${data.score}</span>
+                        <span style="font-size:12px;color:#999;">分</span>
+                    </div>
+                </div>
+                <div class="progress-bar" style="height:6px;margin-bottom:8px;">
+                    <div class="fill" style="width:${data.score}%;background:${progressColor};"></div>
+                </div>
+                <div style="display:flex;gap:16px;font-size:12px;color:#666;">
+                    <span>✅ 符合: <strong>${data.X}</strong></span>
+                    <span>⚠️ 部分符合: <strong>${data.Y}</strong></span>
+                    <span>❌ 不符合: <strong>${data.Z}</strong></span>
+                    <span>📊 总计: <strong>${data.total}</strong></span>
+                    <span>📐 公式: 100×(X+0.5Y)/(X+Y+Z)</span>
+                </div>
+            </div>
+        `;
+    });
+    
+    const scoreColor = overallScore >= 80 ? '#2e7d32' : (overallScore >= 60 ? '#ed6c02' : '#c62828');
+    const overallResultBadge = overallResult === '通过'
+        ? '<span class="badge badge-success" style="font-size:14px;padding:4px 12px;">✓ 风险识别通过</span>'
+        : '<span class="badge badge-danger" style="font-size:14px;padding:4px 12px;">✗ 风险识别不通过</span>';
+    
+    const unassessedWarning = hasUnassessed 
+        ? '<div style="margin-top:12px;padding:10px 14px;background:#fff3e0;border-radius:4px;border-left:4px solid #ed6c02;font-size:13px;color:#e65100;">⚠️ 注意：存在未评估项，建议完成全部评估后获取准确评分。当前评分仅基于已评估项计算。</div>'
+        : '';
+    
+    let suggestionsHtml = '';
+    if (suggestions.length > 0) {
+        suggestionsHtml = `
+            <div style="margin-top:24px;padding:16px;background:#f5f7fa;border-radius:8px;border:1px solid #e0e0e0;">
+                <h4 style="margin:0 0 12px;font-size:15px;color:#1a237e;">💡 改进建议</h4>
+                ${suggestions.map((s, i) => `
+                    <div style="margin-bottom:${i < suggestions.length - 1 ? '12px' : '0'};padding:10px 14px;background:white;border-radius:4px;border-left:3px solid ${s.color};">
+                        <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:${s.color};">${s.title}</div>
+                        <div style="font-size:13px;color:#555;line-height:1.6;">${s.content}</div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    
+    scoreResult.innerHTML = `
+        <div style="text-align:center;padding:20px;background:linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);border-radius:10px;margin-bottom:20px;">
+            <div style="font-size:13px;color:#666;margin-bottom:8px;">最终评估评分</div>
+            <div style="display:inline-flex;align-items:center;gap:10px;">
+                <span style="font-size:56px;font-weight:800;color:${scoreColor};line-height:1;">${overallScore}</span>
+                <span style="font-size:18px;color:#999;">/ 100</span>
+            </div>
+            <div style="margin-top:12px;">${overallResultBadge}</div>
+            <div style="margin-top:10px;font-size:12px;color:#888;">
+                计算公式：S = 100 × (X + 0.5Y) / (X + Y + Z)，其中 X=符合，Y=部分符合，Z=不符合
+            </div>
+            <div style="margin-top:6px;font-size:12px;color:#888;">
+                通过标准：S ≥ 80 且满足正当必要性 → 通过
+            </div>
+            <div style="margin-top:12px;display:flex;justify-content:center;gap:24px;font-size:13px;">
+                <span>✅ 符合: <strong style="color:#2e7d32;">${X}</strong></span>
+                <span>⚠️ 部分符合: <strong style="color:#ed6c02;">${Y}</strong></span>
+                <span>❌ 不符合: <strong style="color:#c62828;">${Z}</strong></span>
+                <span>📊 评估率: <strong>${Math.round(total / Object.values(items).length * 100)}%</strong></span>
+            </div>
+            ${unassessedWarning}
+        </div>
+        
+        <h4 style="margin:0 0 12px;font-size:15px;color:#333;">📊 各维度评分详情</h4>
+        ${l1ScoreHtml}
+        
+        ${suggestionsHtml}
+    `;
+}
+
+function generateSuggestions(l1Scores, overallScore, project) {
+    const suggestions = [];
+    
+    // 1. Overall score suggestion
+    if (overallScore < 80) {
+        suggestions.push({
+            color: '#c62828',
+            title: '整体风险识别未通过',
+            content: `当前评分 ${overallScore} 分，未达到 80 分的通过标准。建议重点关注不符合的评估项，分析根因并制定整改方案。可采用逐项整改方式，优先解决高风险领域的问题。`
+        });
+    } else if (overallScore < 90) {
+        suggestions.push({
+            color: '#ed6c02',
+            title: '整体评分处于中等水平',
+            content: `当前评分 ${overallScore} 分，已通过但仍有提升空间。建议针对部分符合和不符合的指标进行改进，目标将评分提升至 90 分以上。`
+        });
+    }
+    
+    // 2. Per-dimension suggestions
+    Object.entries(l1Scores).forEach(([l1, data]) => {
+        const shortName = l1.replace(/^[一二三四五六七八九十]+、/, '');
+        
+        if (data.score < 80) {
+            // Find specific failing items
+            const failingItems = [];
+            TEMPLATE.forEach((tpl, idx) => {
+                if (tpl.l1 === l1) {
+                    const item = project.items[idx];
+                    if (item && item.result === '不符合') {
+                        failingItems.push(tpl.guidance.substring(0, 30));
+                    }
+                }
+            });
+            
+            const suggestionMap = {
+                '数据安全管理': {
+                    prefix: '建议从以下方面加强数据安全管理体系建设：',
+                    actions: [
+                        '完善数据安全管理制度体系，确保制度覆盖所有数据处理环节',
+                        '建立数据安全组织架构，明确数据安全管理责任人',
+                        '加强数据分类分级管理，建立数据资产台账',
+                        '定期开展数据安全培训和意识教育',
+                        '建立数据安全应急响应机制'
+                    ]
+                },
+                '数据处理活动': {
+                    prefix: '建议规范数据处理活动全流程：',
+                    actions: [
+                        '确保数据收集的合法性，取得充分授权',
+                        '建立数据存储加密机制和访问控制策略',
+                        '规范数据共享和对外转让的审批流程',
+                        '建立数据定期清理和销毁机制'
+                    ]
+                },
+                '数据安全技术': {
+                    prefix: '建议强化数据安全技术防护能力：',
+                    actions: [
+                        '部署数据加密技术，覆盖存储和传输环节',
+                        '实施数据脱敏/匿名化技术',
+                        '建立数据访问审计和监控告警体系',
+                        '部署数据防泄漏（DLP）系统',
+                        '定期进行安全评估和漏洞扫描'
+                    ]
+                },
+                '个人信息保护': {
+                    prefix: '建议加强个人信息保护合规建设：',
+                    actions: [
+                        '完善隐私政策和告知同意机制',
+                        '严格遵循最小必要原则收集个人信息',
+                        '建立个人信息主体权利响应机制',
+                        '加强敏感个人信息的特殊保护措施',
+                        '开展个人信息保护影响评估'
+                    ]
+                }
+            };
+            
+            const info = suggestionMap[shortName] || {
+                prefix: '建议加强该领域的合规建设：',
+                actions: ['完善相关制度和流程', '加强技术防护措施', '定期开展自查和评估']
+            };
+            
+            let content = `${info.prefix}\n`;
+            if (failingItems.length > 0) {
+                content += `<span style="color:#c62828;">需重点整改项：${failingItems.slice(0, 5).join('、')}${failingItems.length > 5 ? '等' : ''}</span>\n`;
+            }
+            content += info.actions.slice(0, 4).map((a, i) => `${i + 1}. ${a}`).join('\n');
+            
+            suggestions.push({
+                color: '#c62828',
+                title: `「${shortName}」维度不通过（${data.score}分）`,
+                content: content.replace(/\n/g, '<br>')
+            });
+        } else if (data.score < 90) {
+            suggestions.push({
+                color: '#ed6c02',
+                title: `「${shortName}」维度待优化（${data.score}分）`,
+                content: `该维度评分 ${data.score} 分，基本通过但仍有改进空间。建议对部分符合的 ${data.Y} 项指标进行优化，争取达到完全符合状态。`
+            });
+        }
+    });
+    
+    // 3. Cross-cutting suggestions
+    const totalFail = Object.values(l1Scores).reduce((sum, d) => sum + d.Z, 0);
+    if (totalFail > 0) {
+        suggestions.push({
+            color: '#1565c0',
+            title: '系统性改进建议',
+            content: `共有 ${totalFail} 项评估指标判定为"不符合"，建议：<br>1. 成立专项整改小组，明确整改责任人<br>2. 制定详细的整改计划和时间表<br>3. 建立整改跟踪和验证机制<br>4. 整改完成后重新开展评估<br>5. 将整改成果纳入制度体系，防止问题复发`
+        });
+    }
+    
+    return suggestions;
+}
+
+function exportScoreReport() {
+    const project = getProject(currentProjectId);
+    if (!project) return;
+    
+    const items = project.items;
+    let X = 0, Y = 0, Z = 0, unassessed = 0;
+    Object.values(items).forEach(item => {
+        if (item.result === '符合') X++;
+        else if (item.result === '部分符合') Y++;
+        else if (item.result === '不符合') Z++;
+        else unassessed++;
+    });
+    
+    const total = X + Y + Z;
+    const score = total > 0 ? Math.round(100 * (X + 0.5 * Y) / total) : 0;
+    const result = score >= 80 ? '通过' : '不通过';
+    
+    let report = `========================================\n`;
+    report += `    数据安全管理评估报告\n`;
+    report += `========================================\n\n`;
+    report += `项目名称：${project.name}\n`;
+    report += `评估对象：${project.target}\n`;
+    report += `评估人员：${project.evaluator || '-'}\n`;
+    report += `评估日期：${project.date || '-'}\n`;
+    report += `生成时间：${new Date().toLocaleString('zh-CN')}\n\n`;
+    report += `----------------------------------------\n`;
+    report += `           评估评分结果\n`;
+    report += `----------------------------------------\n\n`;
+    report += `最终评分：${score} / 100\n`;
+    report += `评估结论：${result}\n\n`;
+    report += `计算公式：S = 100 × (X + 0.5Y) / (X + Y + Z)\n`;
+    report += `符合项数（X）：${X}\n`;
+    report += `部分符合项数（Y）：${Y}\n`;
+    report += `不符合项数（Z）：${Z}\n`;
+    report += `已评估项数：${total}\n`;
+    report += `未评估项数：${unassessed}\n\n`;
+    
+    // Per-L1 scores
+    report += `----------------------------------------\n`;
+    report += `         各维度评分详情\n`;
+    report += `----------------------------------------\n\n`;
+    
+    const l1Data = {};
+    TEMPLATE.forEach((tpl, idx) => {
+        if (!l1Data[tpl.l1]) l1Data[tpl.l1] = { X: 0, Y: 0, Z: 0, total: 0 };
+        l1Data[tpl.l1].total++;
+        const item = items[idx];
+        if (item) {
+            if (item.result === '符合') l1Data[tpl.l1].X++;
+            else if (item.result === '部分符合') l1Data[tpl.l1].Y++;
+            else if (item.result === '不符合') l1Data[tpl.l1].Z++;
+        }
+    });
+    
+    Object.entries(l1Data).forEach(([l1, d]) => {
+        const l1Score = d.total > 0 ? Math.round(100 * (d.X + 0.5 * d.Y) / d.total) : 0;
+        const l1Result = l1Score >= 80 ? '通过' : '不通过';
+        const shortName = l1.replace(/^[一二三四五六七八九十]+、/, '');
+        report += `${shortName}：\n`;
+        report += `  评分：${l1Score} 分  结论：${l1Result}\n`;
+        report += `  符合: ${d.X}  部分符合: ${d.Y}  不符合: ${d.Z}  总计: ${d.total}\n\n`;
+    });
+    
+    report += `========================================\n`;
+    report += `     报告结束\n`;
+    report += `========================================\n`;
+    
+    const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `评估报告_${project.target}_${project.date || new Date().toISOString().slice(0,10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 function renderChart(project, chartType) {
     const chartDom = document.getElementById('chart');
     if (!chartDom) return;
+    
+    // Adjust container class based on chart type
+    if (chartType === 'radar') {
+        chartDom.classList.add('radar-chart');
+    } else {
+        chartDom.classList.remove('radar-chart');
+    }
     
     if (chartInstance) {
         chartInstance.dispose();
@@ -435,24 +774,75 @@ function renderChart(project, chartType) {
         const completedData = categories.map(c => l1Data[c].pass + l1Data[c].partial * 0.5);
         const totalData = categories.map(c => l1Data[c].total);
         
+        // Calculate scores per dimension for tooltip
+        const dimensionScores = categories.map((c, i) => {
+            const total = l1Data[c].total;
+            const score = total > 0 ? Math.round(100 * (l1Data[c].pass + 0.5 * l1Data[c].partial) / total) : 0;
+            return Math.min(100, score);
+        });
+
         const option = {
-            tooltip: {},
-            legend: { data: ['评估得分', '满分'], top: 5 },
+            tooltip: {
+                trigger: 'item',
+                formatter: function(params) {
+                    if (params.seriesName === '评估得分') {
+                        let html = '<div style="font-weight:600;margin-bottom:8px;">各维度得分率</div>';
+                        indicator.forEach((ind, i) => {
+                            const rate = totalData[i] > 0 ? (completedData[i] / totalData[i] * 100).toFixed(1) : '0.0';
+                            html += `<div style="display:flex;justify-content:space-between;gap:20px;font-size:12px;">
+                                <span>${ind.name}</span>
+                                <span style="color:${dimensionScores[i] >= 80 ? '#2e7d32' : '#c62828'};font-weight:600;">${rate}%</span>
+                            </div>`;
+                        });
+                        return html;
+                    }
+                    return `${params.seriesName}`;
+                }
+            },
+            legend: { 
+                data: ['评估得分', '满分基准'], 
+                top: 5,
+                textStyle: { fontSize: 12 }
+            },
             radar: {
-                indicator: indicator,
+                indicator: indicator.map((ind, i) => ({
+                    ...ind,
+                    name: `${ind.name} (${dimensionScores[i]}分)`
+                })),
                 shape: 'polygon',
                 splitNumber: 4,
-                axisName: { color: '#333', fontSize: 11 }
+                center: ['50%', '54%'],
+                radius: '60%',
+                axisName: { 
+                    color: '#333', 
+                    fontSize: 12,
+                    fontWeight: 500
+                },
+                axisNameGap: 15
             },
             series: [{
                 type: 'radar',
+                symbol: 'circle',
+                symbolSize: 6,
                 data: [
-                    { value: completedData, name: '评估得分', areaStyle: { color: 'rgba(26,35,126,0.3)' }, lineStyle: { color: '#1a237e' }, itemStyle: { color: '#1a237e' } },
-                    { value: totalData, name: '满分', areaStyle: { color: 'rgba(200,200,200,0.2)' }, lineStyle: { color: '#999', type: 'dashed' }, itemStyle: { color: '#999' } }
+                    { 
+                        value: completedData, 
+                        name: '评估得分', 
+                        areaStyle: { color: 'rgba(26,35,126,0.25)' }, 
+                        lineStyle: { color: '#1a237e', width: 2 }, 
+                        itemStyle: { color: '#1a237e' } 
+                    },
+                    { 
+                        value: totalData, 
+                        name: '满分基准', 
+                        lineStyle: { color: '#bdbdbd', type: 'dashed', width: 1.5 }, 
+                        itemStyle: { color: '#999' },
+                        areaStyle: { color: 'rgba(189,189,189,0.1)' }
+                    }
                 ]
             }]
         };
-        chartInstance.setOption(option);
+        chartInstance.setOption(option, true);
     } else if (chartType === 'pie') {
         // Pie chart showing overall distribution
         let pass = 0, partial = 0, fail = 0, unassessed = 0;
@@ -741,6 +1131,9 @@ function updateItem(idx, field, value) {
     // Update UI
     renderProjectStats(project);
     renderChart(project);
+    if (field === 'result') {
+        generateFinalScore();
+    }
     renderTree();
 }
 
