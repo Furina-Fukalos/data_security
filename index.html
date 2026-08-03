@@ -193,6 +193,22 @@ tr:hover { background: #f9f9f9; }
       <div class="card-body" id="scoreResult"></div>
     </div>
 
+    <div class="card" id="riskCard" style="display:none;">
+      <div class="card-header">
+        <h3>⚠️ 风险源分析</h3>
+        <div>
+          <button class="btn btn-primary btn-sm" onclick="showAddRiskModal()">+ 添加风险源</button>
+          <button class="btn btn-default btn-sm" onclick="showRiskReference()" style="margin-left:8px;">📖 参考标准</button>
+          <button class="btn btn-default btn-sm" onclick="exportRiskReport()" style="margin-left:8px;">📋 导出风险报告</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="riskSummary" style="margin-bottom:16px;"></div>
+        <div id="riskMatrix" style="margin-bottom:16px;"></div>
+        <div id="riskList"></div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header">
         <h3>📈 评估进度可视化</h3>
@@ -282,6 +298,84 @@ tr:hover { background: #f9f9f9; }
       <button class="btn btn-default" onclick="hideCreateProjectModal()">取消</button>
       <button class="btn btn-primary" onclick="createProject()">创建项目</button>
     </div>
+  </div>
+</div>
+
+<!-- Add Risk Source Modal -->
+<div class="modal-overlay" id="riskModal" style="display:none;">
+  <div class="modal" style="width:640px;">
+    <div class="modal-header">
+      <h3 id="riskModalTitle">添加风险源</h3>
+      <button class="modal-close" onclick="hideRiskModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>风险源名称 *</label>
+        <input type="text" id="riskName" placeholder="例如：核心数据未加密存储">
+      </div>
+      <div class="form-group">
+        <label>风险源描述</label>
+        <textarea id="riskDesc" rows="2" placeholder="描述风险源的具体情况、涉及的数据资产等"></textarea>
+      </div>
+      <div class="form-group">
+        <label>影响对象</label>
+        <select id="riskCategory">
+          <option value="国家安全">国家安全</option>
+          <option value="经济运行">经济运行</option>
+          <option value="社会秩序">社会秩序</option>
+          <option value="公共利益">公共利益</option>
+          <option value="组织权益">组织权益</option>
+          <option value="个人权益">个人权益</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>风险危害程度</label>
+        <select id="riskImpact" onchange="updateRiskLevelPreview()">
+          <option value="">-- 请选择 --</option>
+          <option value="很低">很低</option>
+          <option value="低">低</option>
+          <option value="中">中</option>
+          <option value="高">高</option>
+          <option value="很高">很高</option>
+        </select>
+        <div style="font-size:12px;color:#888;margin-top:4px;">参考：数据价值、数据重要性、风险源严重程度</div>
+      </div>
+      <div class="form-group">
+        <label>风险发生可能性</label>
+        <select id="riskProbability" onchange="updateRiskLevelPreview()">
+          <option value="">-- 请选择 --</option>
+          <option value="低">低 - 措施完备，很少发生</option>
+          <option value="中">中 - 措施不足，可能发生</option>
+          <option value="高">高 - 缺少措施，经常发生</option>
+        </select>
+        <div style="font-size:12px;color:#888;margin-top:4px;">参考：风险源发生频率、安全措施有效性、风险源关联性</div>
+      </div>
+      <div class="form-group">
+        <label>自动计算的风险等级</label>
+        <div id="riskLevelPreview" style="padding:10px 14px;background:#f5f5f5;border-radius:4px;font-size:14px;font-weight:600;color:#999;">
+          请选择危害程度和可能性后自动计算
+        </div>
+      </div>
+      <div class="form-group">
+        <label>处置建议</label>
+        <textarea id="riskSuggestion" rows="3" placeholder="针对该风险源的处置建议（可选）"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-default" onclick="hideRiskModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveRiskSource()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Risk Reference Modal -->
+<div class="modal-overlay" id="riskRefModal" style="display:none;">
+  <div class="modal" style="width:760px;max-height:90vh;">
+    <div class="modal-header">
+      <h3>📖 风险分析参考标准</h3>
+      <button class="modal-close" onclick="document.getElementById('riskRefModal').style.display='none';">×</button>
+    </div>
+    <div class="modal-body" id="riskRefBody"></div>
   </div>
 </div>
 
