@@ -14,7 +14,9 @@ import sys
 from datetime import datetime
 
 # 加载模板数据
-TEMPLATE_DATA_PATH = os.path.join(os.path.dirname(__file__), 'template_data.json')
+TEMPLATE_DATA_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', 'data', 'template_data.json')
+)
 with open(TEMPLATE_DATA_PATH, 'r', encoding='utf-8') as f:
     TEMPLATE = json.load(f)
 
@@ -306,7 +308,7 @@ def export_from_json_file(json_path, output_path=None):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("用法: python export_excel.py <项目JSON文件> [输出Excel路径]")
+        print("用法: python scripts/export_excel.py <项目JSON文件> [输出Excel路径]")
         print("项目JSON文件格式: 由评估系统导出的备份数据")
         sys.exit(1)
     json_path = sys.argv[1]
