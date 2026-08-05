@@ -43,8 +43,6 @@ data_security/
 │   └── export_excel.py      # Python Excel 导出工具
 ├── assets/
 │   └── logo1-default.png
-├── 数据安全管理评估表（优化版）.xlsx  # 评估表样式参考
-└── 风险危害分析.docx                  # 风险矩阵参考文档
 ```
 
 ## 使用方式
