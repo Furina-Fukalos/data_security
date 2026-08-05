@@ -121,6 +121,10 @@ function saveRiskSource() {
 }
 
 function deleteRiskSource(riskId) {
+    if (!hasPermission('manage_risks') && !hasPermission('all')) {
+        alert('您没有删除风险源的权限！');
+        return;
+    }
     if (!confirm('确定要删除这个风险源吗？')) return;
     const project = getProject(currentProjectId);
     if (!project || !project.riskSources) return;

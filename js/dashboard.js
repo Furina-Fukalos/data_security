@@ -3,8 +3,14 @@
 // ============================================
 
 function showCreateProjectModal() {
+    if (!requirePermission('create', '创建项目')) return;
     document.getElementById('createProjectModal').style.display = 'flex';
     document.getElementById('projectDate').valueAsDate = new Date();
+    // 自动填充评估人员为当前登录用户
+    const user = getCurrentUser();
+    if (user) {
+        document.getElementById('projectEvaluator').value = user.name;
+    }
 }
 
 function hideCreateProjectModal() {
@@ -152,7 +158,7 @@ function renderProjectList() {
                 <td>
                     <button class="btn btn-primary btn-sm" onclick="openProject('${p.id}')">打开</button>
                     <button class="btn btn-success btn-sm" onclick="exportProjectToExcel('${p.id}')">导出</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteProjectConfirm('${p.id}')">删除</button>
+                    ${(hasPermission('delete') || hasPermission('all')) ? `<button class="btn btn-danger btn-sm" onclick="deleteProjectConfirm('${p.id}')">删除</button>` : ''}
                 </td>
             </tr>
         `;
@@ -205,6 +211,7 @@ function clearSelection() {
 }
 
 function batchDeleteProjects() {
+    if (!requirePermission('delete', '删除项目')) return;
     if (selectedProjectIds.size === 0) return;
     if (!confirm(`确定要删除 ${selectedProjectIds.size} 个项目吗？此操作不可恢复！`)) return;
     

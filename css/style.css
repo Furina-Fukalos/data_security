@@ -137,10 +137,54 @@ tr:hover { background: #f9f9f9; }
 .save-btn { padding: 8px 24px; background: #1a237e; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
 .save-btn:hover { background: #283593; }
 
+/* 登录页面样式 */
+.login-page { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #3949ab 100%); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+.login-box { background: white; border-radius: 12px; padding: 40px; width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); animation: loginFadeIn 0.5s ease-out; }
+@keyframes loginFadeIn { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }
+.login-logo { text-align: center; margin-bottom: 24px; }
+.login-logo img { width: 64px; height: 64px; margin-bottom: 12px; }
+.login-logo h1 { font-size: 20px; color: #1a237e; margin-bottom: 4px; }
+.login-logo p { font-size: 13px; color: #999; }
+.login-form .form-group { margin-bottom: 16px; }
+.login-form input { width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; transition: all 0.2s; }
+.login-form input:focus { outline: none; border-color: #1a237e; box-shadow: 0 0 0 3px rgba(26,35,126,0.1); }
+.login-error { background: #ffebee; color: #c62828; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; display: none; }
+.login-error.show { display: block; }
+.login-btn { width: 100%; padding: 12px; background: #1a237e; color: white; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: 600; transition: all 0.2s; margin-top: 8px; }
+.login-btn:hover { background: #283593; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,35,126,0.3); }
+.login-footer { text-align: center; margin-top: 16px; font-size: 13px; color: #666; }
+.login-footer a { color: #1a237e; cursor: pointer; text-decoration: none; font-weight: 500; }
+.login-footer a:hover { text-decoration: underline; }
+
+/* Header用户信息区 */
+.header-user { display: flex; align-items: center; gap: 12px; color: white; font-size: 14px; }
+.header-user .user-info { display: flex; align-items: center; gap: 8px; }
+.header-user .avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; }
+.header-user .role-tag { padding: 2px 8px; background: rgba(255,255,255,0.2); border-radius: 10px; font-size: 11px; }
+.header-user .logout-btn { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+.header-user .logout-btn:hover { background: rgba(255,255,255,0.25); }
+
+/* 用户管理面板 */
+.user-mgmt-list { max-height: 400px; overflow-y: auto; }
+.user-mgmt-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 8px; }
+.user-mgmt-item .user-info-block { display: flex; flex-direction: column; gap: 4px; }
+.user-mgmt-item .user-name { font-weight: 600; font-size: 14px; color: #333; }
+.user-mgmt-item .user-meta { font-size: 12px; color: #888; }
+.user-mgmt-item .user-actions { display: flex; gap: 6px; align-items: center; }
+.user-mgmt-item select { padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
+.role-admin { background: #c62828; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.role-leader { background: #ed6c02; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.role-evaluator { background: #1565c0; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+
+/* 注册表单提示 */
+.register-hint { font-size: 12px; color: #999; margin-top: -8px; margin-bottom: 12px; }
+
 @media (max-width: 768px) {
     .item-modal { width: 95%; max-height: 95vh; }
     .tree-item { flex-wrap: wrap; gap: 6px; }
     .tree-item .item-status { width: 100%; }
+    .login-box { padding: 28px 24px; width: 90%; max-width: 360px; }
+    .header-user { flex-wrap: wrap; gap: 8px; }
 }
 
 @media (max-width: 768px) {
@@ -150,4 +194,33 @@ tr:hover { background: #f9f9f9; }
     .tree-items { margin-left: 16px; }
     .tree-l2 { margin-left: 8px; }
     .tree-l3 { margin-left: 16px; }
+}
+
+/* 用户管理页面表格样式 */
+.user-mgmt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.user-mgmt-table thead { background: #1a237e; color: white; }
+.user-mgmt-table th { padding: 12px 14px; text-align: left; font-weight: 600; font-size: 13px; }
+.user-mgmt-table td { padding: 12px 14px; border-bottom: 1px solid #eee; }
+.user-mgmt-table tbody tr:hover { background: #f8f9ff; }
+.user-mgmt-table tbody tr:nth-child(even) { background: #fafafa; }
+.user-mgmt-table tbody tr:nth-child(even):hover { background: #f0f2ff; }
+.user-mgmt-table td input[type="text"],
+.user-mgmt-table td select {
+    padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; width: 100%;
+}
+.user-mgmt-table td input[type="text"]:focus,
+.user-mgmt-table td select:focus { outline: none; border-color: #1a237e; box-shadow: 0 0 0 2px rgba(26,35,126,0.1); }
+.user-mgmt-table td input[disabled] { background: #f5f5f5; color: #999; }
+.user-mgmt-table td .role-badge { padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; display: inline-block; }
+.user-mgmt-table td .action-btns { display: flex; gap: 6px; }
+.user-mgmt-table td .action-btns .btn { padding: 4px 10px; font-size: 12px; }
+
+/* 内联编辑模式 */
+.row-editing { background: #fffde7 !important; }
+.user-mgmt-table td .edit-field { display: flex; gap: 6px; align-items: center; }
+
+@media (max-width: 768px) {
+    .user-mgmt-table { font-size: 12px; }
+    .user-mgmt-table th, .user-mgmt-table td { padding: 8px; }
+    .user-mgmt-table td .action-btns { flex-wrap: wrap; }
 }

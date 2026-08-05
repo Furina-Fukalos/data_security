@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>用户管理 - 数据安全管理评估系统</title>
+<script src="vendor/xlsx-js-style.min.js"></script>
+<script src="vendor/echarts.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+  .user-mgmt-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  .user-mgmt-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: white; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+  .user-mgmt-header .left { display: flex; align-items: center; gap: 16px; }
+  .user-mgmt-header .logo { height: 40px; }
+  .user-mgmt-header h1 { font-size: 20px; color: #333; margin: 0; }
+  .user-mgmt-header .subtitle { font-size: 12px; color: #888; }
+  .user-mgmt-header .right { display: flex; align-items: center; gap: 10px; }
+  .info-bar { padding: 12px 14px; background: #f5f7ff; border-radius: 6px; border: 1px solid #e8eaf6; font-size: 13px; color: #556; margin-bottom: 16px; }
+  .info-bar .role-admin { color: #d32f2f; font-weight: 600; }
+  .info-bar .role-leader { color: #1565c0; font-weight: 600; }
+  .info-bar .role-evaluator { color: #2e7d32; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="user-mgmt-container">
+  <div class="user-mgmt-header">
+    <div class="left">
+      <img src="assets/logo1-default.png" alt="Logo" class="logo" />
+      <div>
+        <h1>👥 用户管理</h1>
+        <div class="subtitle">Data Security Management Evaluation System</div>
+      </div>
+    </div>
+    <div class="right">
+      <span id="currentUserInfo" style="font-size:13px;color:#666;"></span>
+      <button class="btn btn-default btn-sm" onclick="showChangePassword()">🔒 修改密码</button>
+      <button class="btn btn-default btn-sm" onclick="doLogout()">🚪 退出登录</button>
+      <button class="btn btn-primary" onclick="goBack()">← 返回首页</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-header">
+      <h3>用户列表</h3>
+      <div>
+        <span style="font-size:13px;color:#666;">系统用户总数: <strong id="totalUserCount">0</strong></span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="info-bar">
+        <strong>角色权限说明：</strong>
+        <span class="role-admin">系统管理员</span> 全部权限，可管理用户 ·
+        <span class="role-leader">评估组长</span> 可创建/删除项目，管理风险 ·
+        <span class="role-evaluator">一般评估人员</span> 仅可评估指标，管理风险
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="user-mgmt-table" id="userMgmtTable">
+          <thead>
+            <tr>
+              <th>姓名</th>
+              <th>用户名</th>
+              <th>角色</th>
+              <th>注册时间</th>
+              <th style="width:260px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="userMgmtTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3>➕ 添加新用户</h3>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:2fr 2fr 2fr 2fr 1fr;gap:12px;align-items:end;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>用户名 *</label>
+          <input type="text" id="newUserUsername" placeholder="登录用户名">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>姓名 *</label>
+          <input type="text" id="newUserName" placeholder="真实姓名">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>初始密码 *</label>
+          <input type="password" id="newUserPassword" placeholder="至少6位">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>角色</label>
+          <select id="newUserRole">
+            <option value="evaluator">一般评估人员</option>
+            <option value="leader">评估组长</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="addNewUser()" style="height:40px;">添加用户</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal-overlay" id="changePwdModal" style="display:none;">
+  <div class="modal" style="width:420px;">
+    <div class="modal-header">
+      <h3>🔒 修改密码</h3>
+      <button class="modal-close" onclick="document.getElementById('changePwdModal').style.display='none';">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>当前密码</label>
+        <input type="password" id="oldPassword" placeholder="请输入当前密码">
+      </div>
+      <div class="form-group">
+        <label>新密码</label>
+        <input type="password" id="newPassword" placeholder="至少6位字符">
+      </div>
+      <div class="form-group">
+        <label>确认新密码</label>
+        <input type="password" id="confirmPassword" placeholder="再次输入新密码">
+      </div>
+      <button class="btn btn-primary" onclick="handleChangePassword()" style="width:100%;margin-top:8px;">确认修改</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/auth-ui.js"></script>
+<script src="js/constants.js"></script>
+<script src="js/state.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/storage.js"></script>
+<script>
+// 覆盖index.html相关的函数
+function initAuth() {
+    ensureDefaultAdmin();
+}
+
+function onLoginSuccess(user) {
+    // 仅显示当前用户信息
+    document.getElementById('currentUserInfo').innerHTML =
+        `<span style="font-weight:600;">${escapeHtml(user.name)}</span> @ ${escapeHtml(user.username)} <span class="role-badge role-admin">系统管理员</span>`;
+}
+
+function doLogout() {
+    if (!confirm('确定要退出登录吗？')) return;
+    logout();
+    window.location.href = 'index.html';
+}
+
+// 页面初始化：权限守卫 + 渲染
+document.addEventListener('DOMContentLoaded', () => {
+    initAuth();
+
+    const user = getCurrentUser();
+    if (!user) {
+        window.location.href = 'index.html';
+        return;
+    }
+
+    if (user.role !== 'admin') {
+        alert('您没有访问权限！此页面仅系统管理员可用。');
+        window.location.href = 'index.html';
+        return;
+    }
+
+    onLoginSuccess(user);
+    renderUserTable();
+});
+
+function goBack() {
+    window.location.href = 'index.html';
+}
+
+async function handleChangePassword() {
+    const oldPwd = document.getElementById('oldPassword').value;
+    const newPwd = document.getElementById('newPassword').value;
+    const confirmPwd = document.getElementById('confirmPassword').value;
+    const user = getCurrentUser();
+
+    if (!oldPwd || !newPwd) {
+        alert('请填写完整！');
+        return;
+    }
+    if (newPwd !== confirmPwd) {
+        alert('两次输入的新密码不一致！');
+        return;
+    }
+
+    const result = await changeUserPassword(user.id, oldPwd, newPwd);
+    if (result.success) {
+        alert('密码修改成功！');
+        document.getElementById('changePwdModal').style.display = 'none';
+    } else {
+        alert(result.message);
+    }
+}
+</script>
+
+</body>
+</html>

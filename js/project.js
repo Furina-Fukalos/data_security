@@ -33,6 +33,15 @@ function openProject(id) {
             </div>
         `;
         
+        // 权限控制：评估人员隐藏删除项目按钮
+        const isPrivileged = hasPermission('delete') || hasPermission('all');
+        if (!isPrivileged) {
+            const deleteBtn = document.querySelector('#projectView button[onclick="deleteCurrentProject()"]');
+            if (deleteBtn) deleteBtn.style.display = 'none';
+            const backupBtn = document.querySelector('.backup-btn');
+            if (backupBtn) backupBtn.style.display = 'none';
+        }
+        
         // Auto-set filter based on project's applicable setting
         if (project.applicable) {
             document.getElementById('filterApplicable').value = project.applicable;
@@ -908,11 +917,13 @@ function batchSetByL3(l1, l2, l3, result) {
     renderTree();
 }
 function deleteCurrentProject() {
+    if (!requirePermission('delete', '删除项目')) return;
     if (!currentProjectId) return;
     deleteProjectConfirm(currentProjectId);
 }
 
 function deleteProjectConfirm(id) {
+    if (!requirePermission('delete', '删除项目')) return;
     if (!confirm('确定要删除此评估项目吗？此操作不可恢复！')) return;
     deleteProject(id);
     if (id === currentProjectId) {

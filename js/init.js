@@ -3,28 +3,58 @@
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    renderProjectList();
+    // 初始化认证系统
+    initAuth();
     
-    // Add import/export buttons to dashboard
-    const headerRight = document.querySelector('.header');
+    // 只有登录后才渲染项目列表
+    const user = getCurrentUser();
+    if (user) {
+        renderProjectList();
+        setupHeaderButtons();
+    }
+    
+    window.addEventListener('resize', () => {
+        if (chartInstance) {
+            chartInstance.resize();
+        }
+    });
+});
+
+function setupHeaderButtons() {
+    const user = getCurrentUser();
+    if (!user || user.role === 'evaluator') return;
+    
+    const headerRight = document.getElementById('headerUser');
+    if (!headerRight) return;
+    
+    // 检查是否已添加
+    if (headerRight.querySelector('.backup-btn')) return;
+    
     const exportBtn = document.createElement('button');
-    exportBtn.className = 'btn btn-default';
+    exportBtn.className = 'btn btn-default backup-btn';
     exportBtn.style.marginLeft = '8px';
+    exportBtn.style.background = 'rgba(255,255,255,0.15)';
+    exportBtn.style.color = 'white';
+    exportBtn.style.border = '1px solid rgba(255,255,255,0.3)';
     exportBtn.textContent = '📦 备份数据';
     exportBtn.onclick = exportAllData;
     
     const importBtn = document.createElement('button');
-    importBtn.className = 'btn btn-default';
+    importBtn.className = 'btn btn-default import-btn';
     importBtn.style.marginLeft = '8px';
+    importBtn.style.background = 'rgba(255,255,255,0.15)';
+    importBtn.style.color = 'white';
+    importBtn.style.border = '1px solid rgba(255,255,255,0.3)';
     importBtn.textContent = '📂 导入数据';
     importBtn.onclick = importAllData;
     
-    headerRight.lastElementChild.appendChild(exportBtn);
-    headerRight.lastElementChild.appendChild(importBtn);
-});
-
-window.addEventListener('resize', () => {
-    if (chartInstance) {
-        chartInstance.resize();
+    // 在修改密码按钮之前插入
+    const pwdBtn = headerRight.querySelector('button[onclick="showChangePassword()"]');
+    if (pwdBtn) {
+        headerRight.insertBefore(importBtn, pwdBtn);
+        headerRight.insertBefore(exportBtn, importBtn);
+    } else {
+        headerRight.appendChild(exportBtn);
+        headerRight.appendChild(importBtn);
     }
-});
+}
