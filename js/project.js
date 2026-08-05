@@ -448,6 +448,7 @@ function renderTree() {
 
     // Build tree structure
     let tree = {};
+    let visibleIndices = [];
     TEMPLATE.forEach((tpl, idx) => {
         if (filterL1 && tpl.l1 !== filterL1) return;
         if (filterApplicable && tpl.applicable && !tpl.applicable.includes(filterApplicable)) return;
@@ -464,7 +465,11 @@ function renderTree() {
         if (!tree[tpl.l1][tpl.l2]) tree[tpl.l1][tpl.l2] = {};
         if (!tree[tpl.l1][tpl.l2][tpl.l3]) tree[tpl.l1][tpl.l2][tpl.l3] = [];
         tree[tpl.l1][tpl.l2][tpl.l3].push({ idx, tpl, item });
+        visibleIndices.push(idx);
     });
+
+    // Store visible indices for navigation
+    window._visibleItemIndices = visibleIndices;
 
     // Render HTML
     let html = '';
@@ -551,27 +556,21 @@ function renderTree() {
 
                 entries.forEach(entry => {
                     const { idx, tpl, item } = entry;
-                    const resultClass = item.result ? `result${item.result}` : '';
-                    const applicableBadge = tpl.applicable ? 
-                        `<div class="applicable">📍 适用对象: ${escapeHtml(tpl.applicable)}</div>` : '';
-                    const placeholder = getRecordPlaceholder(tpl);
-                    const hint = getRecordHint(tpl);
+                    const statusClass = !item.result ? 'pending' : (item.result === '符合' ? 'pass' : (item.result === '部分符合' ? 'partial' : 'fail'));
+                    const statusText = !item.result ? '待评估' : item.result;
+                    const applicableTag = tpl.applicable ? `<span class="item-applicable-tag">📍 ${escapeHtml(tpl.applicable)}</span>` : '';
+                    const recordIcon = item.record ? '📝' : '';
                     
                     html += `
-                        <div class="tree-item">
-                            <div class="guidance">${escapeHtml(tpl.guidance)}</div>
-                            ${applicableBadge}
-                            <div class="item-hint" style="font-size:12px;color:#666;background:#f5f5f5;padding:6px 10px;border-radius:4px;margin-bottom:8px;">${hint}</div>
-                            <div class="item-actions">
-                                <select onchange="updateItem(${idx}, 'result', this.value)">
-                                    <option value="">-- 判定结果 --</option>
-                                    <option value="符合" ${item.result === '符合' ? 'selected' : ''}>✅ 符合</option>
-                                    <option value="部分符合" ${item.result === '部分符合' ? 'selected' : ''}>⚠️ 部分符合</option>
-                                    <option value="不符合" ${item.result === '不符合' ? 'selected' : ''}>❌ 不符合</option>
-                                </select>
-                                <span class="${resultClass}" style="font-size:12px;margin-left:8px;">${item.result ? '当前: ' + item.result : ''}</span>
+                        <div class="tree-item" onclick="openItemModal(${idx})">
+                            <div class="item-title">
+                                <span class="item-num">${recordIcon}</span>
+                                ${escapeHtml(tpl.guidance)}
                             </div>
-                            <textarea placeholder="${escapeHtml(placeholder)}" onchange="updateItem(${idx}, 'record', this.value)">${escapeHtml(item.record || '')}</textarea>
+                            <div class="item-status">
+                                ${applicableTag}
+                                <span class="status-badge ${statusClass}">${statusText}</span>
+                            </div>
                         </div>
                     `;
                 });
@@ -589,6 +588,192 @@ function renderTree() {
 
     document.getElementById('treeContainer').innerHTML = html;
 }
+
+// ============================================
+// 浮框评估功能
+// ============================================
+
+let _currentItemIdx = null;
+
+function openItemModal(idx) {
+    _currentItemIdx = idx;
+    const project = getProject(currentProjectId);
+    if (!project) return;
+    
+    const tpl = TEMPLATE[idx];
+    if (!tpl) return;
+    
+    const item = project.items[idx] || { record: '', result: '' };
+    const placeholder = getRecordPlaceholder(tpl);
+    const hint = getRecordHint(tpl);
+    
+    // Find position in visible list
+    const visibleIndices = window._visibleItemIndices || [];
+    const posInList = visibleIndices.indexOf(idx);
+    const totalVisible = visibleIndices.length;
+    
+    // Build metadata info
+    const metaParts = [tpl.l1, tpl.l2, tpl.l3].filter(Boolean);
+    const metaHtml = metaParts.map((m, i) => {
+        const icons = ['📋', '📁', '📄'];
+        return `<span class="meta-chip">${icons[i] || '•'} ${escapeHtml(m)}</span>`;
+    }).join('');
+    
+    const applicableChip = tpl.applicable ? 
+        `<span class="meta-chip applicable">📍 ${escapeHtml(tpl.applicable)}</span>` : '';
+    
+    const resultOptions = [
+        { value: '', label: '-- 判定结果 --' },
+        { value: '符合', label: '✅ 符合' },
+        { value: '部分符合', label: '⚠️ 部分符合' },
+        { value: '不符合', label: '❌ 不符合' }
+    ];
+    
+    const selectHtml = resultOptions.map(opt => 
+        `<option value="${opt.value}" ${item.result === opt.value ? 'selected' : ''}>${opt.label}</option>`
+    ).join('');
+    
+    // Title
+    const shortName = (tpl.l2 || '').replace(/^\d+\./, '').trim();
+    document.getElementById('itemModalTitle').textContent = `评估：${shortName} - ${(tpl.l3 || '').replace(/^\d+\./, '').trim()}`;
+    
+    // Body
+    document.getElementById('itemModalBody').innerHTML = `
+        <div class="item-meta-row">
+            ${metaHtml}
+            ${applicableChip}
+        </div>
+        <div class="item-guidance-section">
+            <h4>📖 评估指引</h4>
+            <div class="item-guidance-text">${escapeHtml(tpl.guidance)}</div>
+        </div>
+        <div class="item-hint-box">${hint}</div>
+        <div class="item-form-section">
+            <label>判定结果</label>
+            <select id="itemResultSelect">
+                ${selectHtml}
+            </select>
+        </div>
+        <div class="item-form-section">
+            <label>评估记录</label>
+            <textarea id="itemRecordInput" placeholder="${escapeHtml(placeholder)}">${escapeHtml(item.record || '')}</textarea>
+        </div>
+    `;
+    
+    // Show modal
+    document.getElementById('itemModal').classList.add('active');
+    
+    // Update navigation
+    updateNavButtons();
+}
+
+function closeItemModal() {
+    document.getElementById('itemModal').classList.remove('active');
+    _currentItemIdx = null;
+}
+
+function navigateItem(direction) {
+    const visibleIndices = window._visibleItemIndices || [];
+    if (visibleIndices.length === 0 || _currentItemIdx === null) return;
+    
+    const pos = visibleIndices.indexOf(_currentItemIdx);
+    const newPos = pos + direction;
+    
+    if (newPos < 0 || newPos >= visibleIndices.length) return;
+    
+    // Save current item first
+    saveCurrentItemSilently();
+    
+    // Open new item
+    openItemModal(visibleIndices[newPos]);
+}
+
+function updateNavButtons() {
+    const visibleIndices = window._visibleItemIndices || [];
+    const pos = visibleIndices.indexOf(_currentItemIdx);
+    const total = visibleIndices.length;
+    
+    document.getElementById('itemNavCounter').textContent = total > 0 ? `${pos + 1} / ${total}` : '-';
+    document.getElementById('prevItemBtn').disabled = pos <= 0;
+    document.getElementById('nextItemBtn').disabled = pos >= total - 1;
+}
+
+function saveCurrentItemSilently() {
+    if (_currentItemIdx === null) return;
+    
+    const result = document.getElementById('itemResultSelect')?.value || '';
+    const record = document.getElementById('itemRecordInput')?.value || '';
+    
+    const project = getProject(currentProjectId);
+    if (!project) return;
+    
+    if (!project.items[_currentItemIdx]) {
+        project.items[_currentItemIdx] = { record: '', result: '', applicable_override: '' };
+    }
+    project.items[_currentItemIdx].result = result;
+    project.items[_currentItemIdx].record = record;
+    saveProject(project);
+    
+    // Targeted DOM update: update just this item's badge without full re-render
+    updateTreeItemBadge(_currentItemIdx, result, record);
+    
+    // Update global UI
+    renderProjectStats(project);
+    renderChart(project);
+    if (result) generateFinalScore();
+}
+
+function updateTreeItemBadge(idx, result, record) {
+    const items = document.querySelectorAll('.tree-item');
+    items.forEach(el => {
+        const onclick = el.getAttribute('onclick') || '';
+        if (onclick.includes(`openItemModal(${idx})`)) {
+            const badge = el.querySelector('.status-badge');
+            const icon = el.querySelector('.item-num');
+            if (badge) {
+                const statusClass = !result ? 'pending' : (result === '符合' ? 'pass' : (result === '部分符合' ? 'partial' : 'fail'));
+                const statusText = !result ? '待评估' : result;
+                badge.className = 'status-badge ' + statusClass;
+                badge.textContent = statusText;
+            }
+            if (icon) {
+                icon.textContent = record ? '📝' : '';
+            }
+        }
+    });
+}
+
+function saveAndCloseItem() {
+    saveCurrentItemSilently();
+    closeItemModal();
+    // Re-render tree to update status badges
+    renderTree();
+}
+
+// ESC key to close modal
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('itemModal')?.classList.contains('active')) {
+        closeItemModal();
+        renderTree();
+    }
+    if (e.key === 'ArrowLeft' && document.getElementById('itemModal')?.classList.contains('active') && e.ctrlKey) {
+        navigateItem(-1);
+    }
+    if (e.key === 'ArrowRight' && document.getElementById('itemModal')?.classList.contains('active') && e.ctrlKey) {
+        navigateItem(1);
+    }
+});
+
+// Click outside to close
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('item-modal-overlay')) {
+        if (_currentItemIdx !== null) {
+            saveCurrentItemSilently();
+        }
+        closeItemModal();
+        renderTree();
+    }
+});
 
 function getRecordPlaceholder(tpl) {
     const { l1, l2, l3, guidance } = tpl;
@@ -652,6 +837,7 @@ function getRecordHint(tpl) {
     return '💡 建议提供：相关文档名称、实施日期、执行记录、存在问题及改进建议';
 }
 
+// Legacy: used by old inline-edit tree UI, kept for potential external callers
 function updateItem(idx, field, value) {
     const project = getProject(currentProjectId);
     if (!project) return;

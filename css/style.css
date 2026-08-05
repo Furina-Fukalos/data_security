@@ -88,6 +88,61 @@ tr:hover { background: #f9f9f9; }
 .result符合 { color: #2e7d32; font-weight: 600; }
 .result不符合 { color: #c62828; font-weight: 600; }
 .result部分符合 { color: #ed6c02; font-weight: 600; }
+
+/* 浮框填写样式 - 树节点紧凑显示 */
+.tree-item { padding: 8px 12px; background: white; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 6px; cursor: pointer; transition: all 0.15s; display: flex; justify-content: space-between; align-items: center; }
+.tree-item:hover { background: #f5f5f5; border-color: #1a237e; box-shadow: 0 1px 4px rgba(26,35,126,0.1); }
+.tree-item .item-title { font-size: 13px; color: #333; line-height: 1.5; flex: 1; }
+.tree-item .item-title .item-num { color: #999; margin-right: 4px; }
+.tree-item .item-status { flex-shrink: 0; margin-left: 10px; display: flex; align-items: center; gap: 6px; }
+.tree-item .status-badge { padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.tree-item .status-badge.pending { background: #f5f5f5; color: #999; }
+.tree-item .status-badge.pass { background: #e8f5e9; color: #2e7d32; }
+.tree-item .status-badge.partial { background: #fff3e0; color: #ed6c02; }
+.tree-item .status-badge.fail { background: #ffebee; color: #c62828; }
+.tree-item .item-applicable-tag { font-size: 11px; color: #9c27b0; background: #f3e5f5; padding: 2px 6px; border-radius: 8px; }
+
+/* 评估浮框模态 */
+.item-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: none; justify-content: center; align-items: center; }
+.item-modal-overlay.active { display: flex; }
+.item-modal { background: white; border-radius: 10px; width: 680px; max-width: 92%; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.2); animation: modalSlideIn 0.25s ease-out; }
+@keyframes modalSlideIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+.item-modal-header { padding: 16px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #1a237e, #283593); border-radius: 10px 10px 0 0; }
+.item-modal-header h3 { color: white; font-size: 15px; font-weight: 600; }
+.item-modal-close { background: none; border: none; color: white; font-size: 22px; cursor: pointer; opacity: 0.8; }
+.item-modal-close:hover { opacity: 1; }
+.item-modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+.item-modal-footer { padding: 14px 24px; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #fafafa; border-radius: 0 0 10px 10px; }
+
+/* 浮框内容区 */
+.item-guidance-section { background: #f5f7ff; border: 1px solid #e8eaf6; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.item-guidance-section h4 { font-size: 13px; color: #1a237e; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.item-guidance-text { font-size: 14px; color: #333; line-height: 1.7; }
+.item-meta-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.item-meta-row .meta-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: #e8eaf6; color: #3949ab; border-radius: 12px; font-size: 12px; }
+.item-meta-row .meta-chip.applicable { background: #f3e5f5; color: #7b1fa2; }
+.item-hint-box { background: #fffde7; border-left: 3px solid #fbc02d; padding: 10px 14px; border-radius: 4px; font-size: 13px; color: #5d4037; margin-bottom: 16px; line-height: 1.6; }
+.item-form-section { margin-bottom: 16px; }
+.item-form-section label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 8px; }
+.item-form-section select { width: 100%; padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; background: white; cursor: pointer; }
+.item-form-section select:focus { outline: none; border-color: #1a237e; box-shadow: 0 0 0 3px rgba(26,35,126,0.1); }
+.item-form-section textarea { width: 100%; min-height: 140px; padding: 12px 14px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; font-family: inherit; resize: vertical; line-height: 1.6; }
+.item-form-section textarea:focus { outline: none; border-color: #1a237e; box-shadow: 0 0 0 3px rgba(26,35,126,0.1); }
+
+/* 浮框导航按钮 */
+.nav-btn { padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+.nav-btn:hover:not(:disabled) { background: #f5f5f5; border-color: #1a237e; }
+.nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.nav-counter { font-size: 13px; color: #666; }
+.save-btn { padding: 8px 24px; background: #1a237e; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.save-btn:hover { background: #283593; }
+
+@media (max-width: 768px) {
+    .item-modal { width: 95%; max-height: 95vh; }
+    .tree-item { flex-wrap: wrap; gap: 6px; }
+    .tree-item .item-status { width: 100%; }
+}
+
 @media (max-width: 768px) {
     .header { flex-direction: column; gap: 8px; text-align: center; }
     .stats-grid { grid-template-columns: repeat(2, 1fr); }

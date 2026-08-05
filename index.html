@@ -280,6 +280,25 @@
   </div>
 </div>
 
+<!-- Item Assessment Modal -->
+<div class="item-modal-overlay" id="itemModal">
+  <div class="item-modal">
+    <div class="item-modal-header">
+      <h3 id="itemModalTitle">评估指标</h3>
+      <button class="item-modal-close" onclick="closeItemModal()">×</button>
+    </div>
+    <div class="item-modal-body" id="itemModalBody"></div>
+    <div class="item-modal-footer">
+      <button class="nav-btn" id="prevItemBtn" onclick="navigateItem(-1)">← 上一个</button>
+      <span class="nav-counter" id="itemNavCounter"></span>
+      <div style="display:flex;gap:10px;">
+        <button class="nav-btn" id="nextItemBtn" onclick="navigateItem(1)">下一个 →</button>
+        <button class="save-btn" onclick="saveAndCloseItem()">💾 保存并关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="js/constants.js"></script>
 <script src="js/state.js"></script>
 <script src="js/utils.js"></script>
