@@ -99,8 +99,6 @@ data_security/
 │   └── 示例报告_数据安全评估.md         # 示例报告（Markdown）
 ├── assets/
 │   └── logo1-default.png
-├── 数据安全管理评估表（优化版）.xlsx  # 评估表样式参考
-└── 风险危害分析.docx                  # 风险矩阵参考文档
 ```
 
 ## 使用方式
