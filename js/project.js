@@ -29,8 +29,10 @@ function openProject(id) {
                 <div><strong>评估人员：</strong>${escapeHtml(project.evaluator || '-')}</div>
                 <div><strong>评估日期：</strong>${project.date || '-'}</div>
                 <div><strong>适用对象：</strong>${project.applicable || '全部适用对象'}</div>
+                ${hasCustomCriteria(project) ? `<div style="grid-column:1/-1;"><strong>评估准则：</strong>项目专属准则（${project.criteria.length} 项，来源：${escapeHtml(project.criteriaSource || '报告导入')}）</div>` : ''}
                 ${project.desc ? `<div style="grid-column:1/-1;"><strong>项目描述：</strong>${escapeHtml(project.desc)}</div>` : ''}
             </div>
+            ${renderWordSurveyData(project)}
         `;
         
         // 权限控制：评估人员隐藏删除项目按钮
@@ -49,26 +51,27 @@ function openProject(id) {
 
         // Setup filter dropdowns
         const filterL1 = document.getElementById('filterL1');
-        const l1Categories = [...new Set(TEMPLATE.map(t => t.l1))];
+        const l1Categories = [...new Set(getProjectCriteria(project).map(t => t.l1))];
         filterL1.innerHTML = '<option value="">全部一级指标</option>' + 
             l1Categories.map(l1 => `<option value="${l1}">${l1}</option>`).join('');
         
-        // Project stats
+        // 统计 / 评分（复用同一次遍历的缓存）
         renderProjectStats(project);
-        
-        // Render chart
-        setTimeout(() => {
-            try { renderChart(project, 'bar'); } catch(e) { console.error('图表渲染失败:', e); }
-        }, 100);
-        
-        // Show score card
         generateFinalScore();
+        
+        // 图表：按需加载 echarts 后渲染
+        preloadLib('echarts');
+        renderChart(project, currentChartType);
         
         // Show risk card
         renderRiskSources();
         
         // Render tree
         renderTree();
+        
+        // 重置到项目页顶部与区块导航状态
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        setupSectionNav();
     } catch (err) {
         console.error('打开项目失败:', err);
         alert('打开项目失败: ' + err.message);
@@ -84,37 +87,29 @@ function backToDashboard() {
 }
 
 function renderProjectStats(project) {
-    const items = Object.values(project.items);
-    let total = items.length;
-    let completed = 0;
-    let pass = 0;
-    let partial = 0;
-    let fail = 0;
-    
-    items.forEach(item => {
-        if (item.result === '符合') { completed++; pass++; }
-        else if (item.result === '部分符合') { completed++; partial++; }
-        else if (item.result === '不符合') { completed++; fail++; }
-    });
-
-    const pct = total > 0 ? Math.round(completed / total * 100) : 0;
+    const s = computeItemStats(project);
+    const pct = s.total > 0 ? Math.round(s.assessed / s.total * 100) : 0;
 
     document.getElementById('projectStats').innerHTML = `
         <div class="stat-card">
-            <div class="stat-value">${total}</div>
+            <div class="stat-value">${s.total}</div>
             <div class="stat-label">评估项总数</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value stat-success">${pass}</div>
+            <div class="stat-value stat-success">${s.pass}</div>
             <div class="stat-label">符合项</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value stat-warn">${partial}</div>
+            <div class="stat-value stat-warn">${s.partial}</div>
             <div class="stat-label">部分符合</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value stat-danger">${fail}</div>
+            <div class="stat-value stat-danger">${s.fail}</div>
             <div class="stat-label">不符合</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" style="color:${RESULT_META['不适用'].color};">${s.na}</div>
+            <div class="stat-label">不适用</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">${pct}%</div>
@@ -123,47 +118,41 @@ function renderProjectStats(project) {
     `;
 }
 
+/** 保存后统一刷新统计/图表/评分（避免多处重复三连调用） */
+function refreshProjectViews(project, opts) {
+    opts = opts || {};
+    renderProjectStats(project);
+    try {
+        const p = renderChart(project); // 图表按需加载，返回 Promise
+        if (p && typeof p.catch === 'function') p.catch(e => console.error('图表渲染失败:', e));
+    } catch (e) {
+        console.error('图表渲染失败:', e);
+    }
+    if (opts.score !== false) generateFinalScore();
+}
+
 function generateFinalScore() {
     const project = getProject(currentProjectId);
     if (!project) return;
     
-    const items = project.items;
-    let X = 0, Y = 0, Z = 0;
-    
-    Object.values(items).forEach(item => {
-        if (item.result === '符合') X++;
-        else if (item.result === '部分符合') Y++;
-        else if (item.result === '不符合') Z++;
-    });
-    
-    const total = X + Y + Z;
-    const hasUnassessed = Object.values(items).some(i => !i.result);
-    
-    // Overall score: 100 * (X + 0.5Y) / (X + Y + Z)
-    const overallScore = total > 0 ? Math.round(100 * (X + 0.5 * Y) / total) : 0;
+    const s = computeItemStats(project);
+    const X = s.pass, Y = s.partial, Z = s.fail, NA = s.na;
+    const total = s.scored;
+    const assessed = s.assessed;
+    const hasUnassessed = s.unassessed > 0;
+    const overallScore = s.score;
     const passThreshold = 80;
     const overallResult = overallScore >= passThreshold ? '通过' : '不通过';
     
-    // Per-L1 scores
-    const l1Data = {};
-    TEMPLATE.forEach((tpl, idx) => {
-        if (!l1Data[tpl.l1]) l1Data[tpl.l1] = { X: 0, Y: 0, Z: 0, total: 0 };
-        l1Data[tpl.l1].total++;
-        const item = items[idx];
-        if (item) {
-            if (item.result === '符合') l1Data[tpl.l1].X++;
-            else if (item.result === '部分符合') l1Data[tpl.l1].Y++;
-            else if (item.result === '不符合') l1Data[tpl.l1].Z++;
-        }
-    });
-    
+    // Per-L1 scores（total 口径与该维度参与评分的指标数一致；整维度均不适用的不计入）
+    const l1Stats = computeL1Stats(project);
     const l1Scores = {};
-    Object.entries(l1Data).forEach(([l1, d]) => {
-        const score = d.total > 0 ? Math.round(100 * (d.X + 0.5 * d.Y) / d.total) : 0;
+    Object.entries(l1Stats).forEach(([l1, d]) => {
+        if (d.scored === 0) return;
         l1Scores[l1] = {
-            score: score,
-            X: d.X, Y: d.Y, Z: d.Z, total: d.total,
-            result: score >= passThreshold ? '通过' : '不通过'
+            score: d.score,
+            X: d.pass, Y: d.partial, Z: d.fail, total: d.scored,
+            result: d.score >= passThreshold ? '通过' : '不通过'
         };
     });
     
@@ -250,7 +239,8 @@ function generateFinalScore() {
                 <span>✅ 符合: <strong style="color:#2e7d32;">${X}</strong></span>
                 <span>⚠️ 部分符合: <strong style="color:#ed6c02;">${Y}</strong></span>
                 <span>❌ 不符合: <strong style="color:#c62828;">${Z}</strong></span>
-                <span>📊 评估率: <strong>${Math.round(total / Object.values(items).length * 100)}%</strong></span>
+                <span>⛔ 不适用: <strong style="color:#607d8b;">${NA}</strong></span>
+                <span>📊 评估率: <strong>${Math.round(assessed / (s.total || 1) * 100)}%</strong></span>
             </div>
             ${unassessedWarning}
         </div>
@@ -287,7 +277,7 @@ function generateSuggestions(l1Scores, overallScore, project) {
         if (data.score < 80) {
             // Find specific failing items
             const failingItems = [];
-            TEMPLATE.forEach((tpl, idx) => {
+            getProjectCriteria(project).forEach((tpl, idx) => {
                 if (tpl.l1 === l1) {
                     const item = project.items[idx];
                     if (item && item.result === '不符合') {
@@ -380,17 +370,9 @@ function exportScoreReport() {
     const project = getProject(currentProjectId);
     if (!project) return;
     
-    const items = project.items;
-    let X = 0, Y = 0, Z = 0, unassessed = 0;
-    Object.values(items).forEach(item => {
-        if (item.result === '符合') X++;
-        else if (item.result === '部分符合') Y++;
-        else if (item.result === '不符合') Z++;
-        else unassessed++;
-    });
-    
-    const total = X + Y + Z;
-    const score = total > 0 ? Math.round(100 * (X + 0.5 * Y) / total) : 0;
+    const s = computeItemStats(project);
+    const X = s.pass, Y = s.partial, Z = s.fail, NA = s.na;
+    const score = s.score;
     const result = score >= 80 ? '通过' : '不通过';
     
     let report = `========================================\n`;
@@ -406,37 +388,27 @@ function exportScoreReport() {
     report += `----------------------------------------\n\n`;
     report += `最终评分：${score} / 100\n`;
     report += `评估结论：${result}\n\n`;
-    report += `计算公式：S = 100 × (X + 0.5Y) / (X + Y + Z)\n`;
+    report += `计算公式：S = 100 × (X + 0.5Y) / (X + Y + Z)（不适用项不计入评分）\n`;
     report += `符合项数（X）：${X}\n`;
     report += `部分符合项数（Y）：${Y}\n`;
     report += `不符合项数（Z）：${Z}\n`;
-    report += `已评估项数：${total}\n`;
-    report += `未评估项数：${unassessed}\n\n`;
+    report += `不适用项数：${NA}\n`;
+    report += `已评估项数：${s.assessed}\n`;
+    report += `未评估项数：${s.unassessed}\n\n`;
     
     // Per-L1 scores
     report += `----------------------------------------\n`;
     report += `         各维度评分详情\n`;
     report += `----------------------------------------\n\n`;
     
-    const l1Data = {};
-    TEMPLATE.forEach((tpl, idx) => {
-        if (!l1Data[tpl.l1]) l1Data[tpl.l1] = { X: 0, Y: 0, Z: 0, total: 0 };
-        l1Data[tpl.l1].total++;
-        const item = items[idx];
-        if (item) {
-            if (item.result === '符合') l1Data[tpl.l1].X++;
-            else if (item.result === '部分符合') l1Data[tpl.l1].Y++;
-            else if (item.result === '不符合') l1Data[tpl.l1].Z++;
-        }
-    });
-    
-    Object.entries(l1Data).forEach(([l1, d]) => {
-        const l1Score = d.total > 0 ? Math.round(100 * (d.X + 0.5 * d.Y) / d.total) : 0;
-        const l1Result = l1Score >= 80 ? '通过' : '不通过';
+    const l1Stats = computeL1Stats(project);
+    Object.entries(l1Stats).forEach(([l1, d]) => {
+        if (d.scored === 0) return; // 整维度均不适用的不计入报告明细
+        const l1Result = d.score >= 80 ? '通过' : '不通过';
         const shortName = l1.replace(/^[一二三四五六七八九十]+、/, '');
         report += `${shortName}：\n`;
-        report += `  评分：${l1Score} 分  结论：${l1Result}\n`;
-        report += `  符合: ${d.X}  部分符合: ${d.Y}  不符合: ${d.Z}  总计: ${d.total}\n\n`;
+        report += `  评分：${d.score} 分  结论：${l1Result}\n`;
+        report += `  符合: ${d.pass}  部分符合: ${d.partial}  不符合: ${d.fail}  不适用: ${d.na}  总计: ${d.scored}\n\n`;
     });
     
     report += `========================================\n`;
@@ -446,6 +418,45 @@ function exportScoreReport() {
     const blob = new Blob([report], { type: 'text/plain;charset=utf-8' });
     downloadBlob(blob, `评估报告_${project.target}_${project.date || new Date().toISOString().slice(0,10)}.txt`);
 }
+// 搜索/筛选输入防抖：477 项全量重绘时避免逐字符卡顿
+let _treeRenderTimer = null;
+function scheduleRenderTree(delay) {
+    if (_treeRenderTimer) clearTimeout(_treeRenderTimer);
+    _treeRenderTimer = setTimeout(() => {
+        _treeRenderTimer = null;
+        renderTree();
+    }, delay === undefined ? 220 : delay);
+}
+
+/** 项目页区块锚点跳转（长页面快速定位，不改变任何内容） */
+function scrollToSection(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 区块导航高亮（滚动时自动标记当前所在区块）
+let _sectionObserver = null;
+function setupSectionNav() {
+    const links = Array.from(document.querySelectorAll('#projectSectionNav [data-section]'));
+    if (links.length === 0) return;
+    if (_sectionObserver) { _sectionObserver.disconnect(); _sectionObserver = null; }
+    if (!('IntersectionObserver' in window)) return;
+
+    const map = {};
+    links.forEach(a => { map[a.dataset.section] = a; });
+    _sectionObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+            links.forEach(a => a.classList.toggle('active', a.dataset.section === entry.target.id));
+        });
+    }, { rootMargin: '-15% 0px -75% 0px', threshold: 0 });
+    links.forEach(a => {
+        const el = document.getElementById(a.dataset.section);
+        if (el) _sectionObserver.observe(el);
+    });
+}
+
 function renderTree() {
     const project = getProject(currentProjectId);
     if (!project) return;
@@ -458,7 +469,7 @@ function renderTree() {
     // Build tree structure
     let tree = {};
     let visibleIndices = [];
-    TEMPLATE.forEach((tpl, idx) => {
+    getProjectCriteria(project).forEach((tpl, idx) => {
         if (filterL1 && tpl.l1 !== filterL1) return;
         if (filterApplicable && tpl.applicable && !tpl.applicable.includes(filterApplicable)) return;
         if (searchTerm && !tpl.guidance.toLowerCase().includes(searchTerm)) return;
@@ -484,16 +495,17 @@ function renderTree() {
     let html = '';
     for (const [l1, l2s] of Object.entries(tree)) {
         // Count stats for L1
-        let l1Total = 0, l1Done = 0, l1Pass = 0, l1Partial = 0, l1Fail = 0;
+        let l1Total = 0, l1Done = 0, l1Pass = 0, l1Partial = 0, l1Fail = 0, l1Na = 0;
         Object.values(l2s).forEach(l2 => {
             Object.values(l2).forEach(l3 => {
                 l3.forEach(entry => {
                     l1Total++;
                     const r = entry.item.result;
-                    if (r) l1Done++;
-                    if (r === '符合') l1Pass++;
-                    if (r === '部分符合') l1Partial++;
-                    if (r === '不符合') l1Fail++;
+                    if (isAssessed(r)) l1Done++;
+                    if (r === RESULT.PASS) l1Pass++;
+                    else if (r === RESULT.PARTIAL) l1Partial++;
+                    else if (r === RESULT.FAIL) l1Fail++;
+                    else if (r === RESULT.NA) l1Na++;
                 });
             });
         });
@@ -505,6 +517,7 @@ function renderTree() {
                 <span class="badge badge-success">${l1Pass}</span>
                 <span class="badge badge-warn">${l1Partial}</span>
                 <span class="badge badge-danger">${l1Fail}</span>
+                <span class="badge" style="background:#eceff1;color:#607d8b;">${l1Na}</span>
             </span>` : '';
 
         html += `
@@ -515,6 +528,7 @@ function renderTree() {
                     <button class="btn btn-sm btn-default" onclick="batchSetByL1('${l1}', '符合')">全部符合</button>
                     <button class="btn btn-sm btn-default" onclick="batchSetByL1('${l1}', '部分符合')">全部部分符合</button>
                     <button class="btn btn-sm btn-default" onclick="batchSetByL1('${l1}', '不符合')">全部不符合</button>
+                    <button class="btn btn-sm btn-default" onclick="batchSetByL1('${l1}', '不适用')">全部不适用</button>
                     <button class="btn btn-sm btn-default" onclick="batchSetByL1('${l1}', '')">清除</button>
                 </span>
             </div>
@@ -565,7 +579,7 @@ function renderTree() {
 
                 entries.forEach(entry => {
                     const { idx, tpl, item } = entry;
-                    const statusClass = !item.result ? 'pending' : (item.result === '符合' ? 'pass' : (item.result === '部分符合' ? 'partial' : 'fail'));
+                    const statusClass = getResultStatusClass(item.result);
                     const statusText = !item.result ? '待评估' : item.result;
                     const applicableTag = tpl.applicable ? `<span class="item-applicable-tag">📍 ${escapeHtml(tpl.applicable)}</span>` : '';
                     const recordIcon = item.record ? '📝' : '';
@@ -609,7 +623,7 @@ function openItemModal(idx) {
     const project = getProject(currentProjectId);
     if (!project) return;
     
-    const tpl = TEMPLATE[idx];
+    const tpl = getProjectCriteria(project)[idx];
     if (!tpl) return;
     
     const item = project.items[idx] || { record: '', result: '' };
@@ -631,12 +645,7 @@ function openItemModal(idx) {
     const applicableChip = tpl.applicable ? 
         `<span class="meta-chip applicable">📍 ${escapeHtml(tpl.applicable)}</span>` : '';
     
-    const resultOptions = [
-        { value: '', label: '-- 判定结果 --' },
-        { value: '符合', label: '✅ 符合' },
-        { value: '部分符合', label: '⚠️ 部分符合' },
-        { value: '不符合', label: '❌ 不符合' }
-    ];
+    const resultOptions = RESULT_OPTIONS.map(v => ({ value: v, label: getResultMeta(v).label }));
     
     const selectHtml = resultOptions.map(opt => 
         `<option value="${opt.value}" ${item.result === opt.value ? 'selected' : ''}>${opt.label}</option>`
@@ -656,6 +665,8 @@ function openItemModal(idx) {
             <h4>📖 评估指引</h4>
             <div class="item-guidance-text">${escapeHtml(tpl.guidance)}</div>
         </div>
+        ${tpl.position ? `<div class="item-info-section position"><h4>📍 评估位置（取证位置）</h4><div class="item-info-text">${escapeHtml(tpl.position)}</div></div>` : ''}
+        ${tpl.implement ? `<div class="item-info-section implement"><h4>🔧 评估实施方法</h4><div class="item-info-text">${escapeHtml(tpl.implement)}</div></div>` : ''}
         <div class="item-hint-box">${hint}</div>
         <div class="item-form-section">
             <label>判定结果</label>
@@ -719,17 +730,17 @@ function saveCurrentItemSilently() {
     if (!project.items[_currentItemIdx]) {
         project.items[_currentItemIdx] = { record: '', result: '', applicable_override: '' };
     }
-    project.items[_currentItemIdx].result = result;
-    project.items[_currentItemIdx].record = record;
+    const item = project.items[_currentItemIdx];
+    // 未发生变化时不落盘、不重绘（切换指标/点击空白处等高频场景）
+    if (item.result === result && item.record === record) return;
+    
+    item.result = result;
+    item.record = record;
     saveProject(project);
     
-    // Targeted DOM update: update just this item's badge without full re-render
+    // 局部更新该指标的徽章，避免整树重绘
     updateTreeItemBadge(_currentItemIdx, result, record);
-    
-    // Update global UI
-    renderProjectStats(project);
-    renderChart(project);
-    if (result) generateFinalScore();
+    refreshProjectViews(project);
 }
 
 function updateTreeItemBadge(idx, result, record) {
@@ -740,7 +751,7 @@ function updateTreeItemBadge(idx, result, record) {
             const badge = el.querySelector('.status-badge');
             const icon = el.querySelector('.item-num');
             if (badge) {
-                const statusClass = !result ? 'pending' : (result === '符合' ? 'pass' : (result === '部分符合' ? 'partial' : 'fail'));
+                const statusClass = getResultStatusClass(result);
                 const statusText = !result ? '待评估' : result;
                 badge.className = 'status-badge ' + statusClass;
                 badge.textContent = statusText;
@@ -759,19 +770,54 @@ function saveAndCloseItem() {
     renderTree();
 }
 
-// ESC key to close modal
+// 快捷键：ESC 关闭 / Ctrl+←→ 上下一条 / Alt+↑↓ 跳未评估 / 1-4 快速判定 / Ctrl+S 保存
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && document.getElementById('itemModal')?.classList.contains('active')) {
+    const modal = document.getElementById('itemModal');
+    if (!modal || !modal.classList.contains('active')) return;
+
+    const tag = (e.target && e.target.tagName) || '';
+    const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+    if (e.key === 'Escape') {
         closeItemModal();
         renderTree();
+        return;
     }
-    if (e.key === 'ArrowLeft' && document.getElementById('itemModal')?.classList.contains('active') && e.ctrlKey) {
-        navigateItem(-1);
-    }
-    if (e.key === 'ArrowRight' && document.getElementById('itemModal')?.classList.contains('active') && e.ctrlKey) {
-        navigateItem(1);
+    if (e.ctrlKey && e.key === 'ArrowLeft') { e.preventDefault(); navigateItem(-1); return; }
+    if (e.ctrlKey && e.key === 'ArrowRight') { e.preventDefault(); navigateItem(1); return; }
+    if (e.ctrlKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); saveAndCloseItem(); return; }
+    if (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowRight')) { e.preventDefault(); navigateUnassessed(1); return; }
+    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) { e.preventDefault(); navigateUnassessed(-1); return; }
+
+    // 数字键快速判定（1=符合 2=部分符合 3=不符合 4=不适用），输入框内不拦截
+    if (!typing && !e.ctrlKey && !e.altKey && RESULT_OPTIONS[e.key]) {
+        const select = document.getElementById('itemResultSelect');
+        if (select) {
+            select.value = RESULT_OPTIONS[e.key];
+            select.focus();
+            e.preventDefault();
+        }
     }
 });
+
+/** 跳到上/下一条「未评估」指标（现场评估提速） */
+function navigateUnassessed(direction) {
+    const visibleIndices = window._visibleItemIndices || [];
+    if (visibleIndices.length === 0 || _currentItemIdx === null) return;
+    const project = getProject(currentProjectId);
+    if (!project) return;
+
+    const start = visibleIndices.indexOf(_currentItemIdx);
+    for (let i = start + direction; i >= 0 && i < visibleIndices.length; i += direction) {
+        const item = project.items[visibleIndices[i]];
+        if (!item || !isAssessed(item.result)) {
+            saveCurrentItemSilently();
+            openItemModal(visibleIndices[i]);
+            return;
+        }
+    }
+    alert('已没有其他未评估的指标了。');
+}
 
 // Click outside to close
 document.addEventListener('click', function(e) {
@@ -858,11 +904,7 @@ function updateItem(idx, field, value) {
     saveProject(project);
     
     // Update UI
-    renderProjectStats(project);
-    renderChart(project);
-    if (field === 'result') {
-        generateFinalScore();
-    }
+    refreshProjectViews(project);
     renderTree();
 }
 function toggleNode(el) {
@@ -872,49 +914,103 @@ function toggleNode(el) {
     }
 }
 
-function batchSetByL1(l1, result) {
+/** 批量设置判定结果的统一实现（L1/L2/L3 共用，避免三份重复逻辑） */
+function batchSetByResult(matchFn, result) {
     const project = getProject(currentProjectId);
     if (!project) return;
-    TEMPLATE.forEach((tpl, idx) => {
-        if (tpl.l1 === l1) {
-            if (!project.items[idx]) project.items[idx] = { record: '', result: '' };
+    let changed = 0;
+    getProjectCriteria(project).forEach((tpl, idx) => {
+        if (!matchFn(tpl)) return;
+        if (!project.items[idx]) project.items[idx] = { record: '', result: '', applicable_override: '' };
+        if (project.items[idx].result !== result) {
             project.items[idx].result = result;
+            changed++;
         }
     });
+    if (changed === 0) return; // 无变化则不落盘、不重绘
     saveProject(project);
-    renderProjectStats(project);
-    renderChart(project);
+    refreshProjectViews(project);
     renderTree();
+}
+
+function batchSetByL1(l1, result) {
+    batchSetByResult(tpl => tpl.l1 === l1, result);
 }
 
 function batchSetByL2(l1, l2, result) {
-    const project = getProject(currentProjectId);
-    if (!project) return;
-    TEMPLATE.forEach((tpl, idx) => {
-        if (tpl.l1 === l1 && tpl.l2 === l2) {
-            if (!project.items[idx]) project.items[idx] = { record: '', result: '' };
-            project.items[idx].result = result;
-        }
-    });
-    saveProject(project);
-    renderProjectStats(project);
-    renderChart(project);
-    renderTree();
+    batchSetByResult(tpl => tpl.l1 === l1 && tpl.l2 === l2, result);
 }
 
 function batchSetByL3(l1, l2, l3, result) {
-    const project = getProject(currentProjectId);
-    if (!project) return;
-    TEMPLATE.forEach((tpl, idx) => {
-        if (tpl.l1 === l1 && tpl.l2 === l2 && tpl.l3 === l3) {
-            if (!project.items[idx]) project.items[idx] = { record: '', result: '' };
-            project.items[idx].result = result;
-        }
-    });
-    saveProject(project);
-    renderProjectStats(project);
-    renderChart(project);
-    renderTree();
+    batchSetByResult(tpl => tpl.l1 === l1 && tpl.l2 === l2 && tpl.l3 === l3, result);
+}
+
+// 渲染Word调研表导入的数据
+function renderWordSurveyData(project) {
+    if (!project.wordSurveyData) return '';
+    const wd = project.wordSurveyData;
+    let html = '<div style="margin-top:16px;padding:12px;background:#f5f7ff;border-radius:8px;border:1px solid #e8eaf6;">';
+    html += '<div style="font-weight:600;color:#1a237e;margin-bottom:8px;font-size:13px;">📋 调研表数据（从Word导入）</div>';
+
+    // 基本信息
+    const bi = wd.basicInfo || {};
+    const basicFields = [
+        ['统一社会信用代码', '统一社会信用代码'],
+        ['所属行业领域', '所属行业领域*'],
+        ['经营范围规模', '经营范围规模'],
+        ['组织机构代码', '组织机构代码'],
+        ['业务地区', '业务地区'],
+        ['上市情况', '上市情况'],
+        ['行政许可情况', '行政许可情况'],
+        ['运营控制情况', '运营控制情况'],
+        ['综合得分', '综合得分*'],
+        ['评估结论', '评估结论*'],
+        ['评估结论描述', '评估结论描述']
+    ];
+    const filledBasic = basicFields.filter(([_, key]) => bi[key]);
+    if (filledBasic.length > 0) {
+        html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 16px;font-size:12px;margin-bottom:8px;">';
+        filledBasic.forEach(([label, key]) => {
+            html += `<div><span style="color:#888;">${label}:</span> <strong>${escapeHtml(bi[key])}</strong></div>`;
+        });
+        html += '</div>';
+    }
+
+    // 系统功能描述
+    if (wd.systemDesc) {
+        html += `<div style="font-size:12px;margin-bottom:8px;"><span style="color:#888;">系统功能描述:</span> ${escapeHtml(wd.systemDesc)}</div>`;
+    }
+
+    // 数据资产表
+    if (wd.dataAssets && wd.dataAssets.length > 0) {
+        html += `<div style="font-size:12px;font-weight:600;margin-top:8px;margin-bottom:4px;">数据资产情况（${wd.dataAssets.length}条）</div>`;
+        html += '<div style="overflow-x:auto;"><table style="font-size:11px;width:100%;border-collapse:collapse;">';
+        const headers = Object.keys(wd.dataAssets[0]);
+        html += '<tr>' + headers.map(h => `<th style="border:1px solid #ddd;padding:4px;background:#e3f2fd;text-align:left;">${escapeHtml(h)}</th>`).join('') + '</tr>';
+        wd.dataAssets.forEach(item => {
+            html += '<tr>' + headers.map(h => `<td style="border:1px solid #ddd;padding:4px;">${escapeHtml(item[h] || '')}</td>`).join('') + '</tr>';
+        });
+        html += '</table></div>';
+    }
+
+    // 数据分类分级表
+    if (wd.dataClassification && wd.dataClassification.length > 0) {
+        html += `<div style="font-size:12px;font-weight:600;margin-top:8px;margin-bottom:4px;">数据分类分级情况（${wd.dataClassification.length}条）</div>`;
+        html += '<div style="overflow-x:auto;"><table style="font-size:11px;width:100%;border-collapse:collapse;">';
+        const headers = Object.keys(wd.dataClassification[0]);
+        html += '<tr>' + headers.map(h => `<th style="border:1px solid #ddd;padding:4px;background:#e8f5e9;text-align:left;">${escapeHtml(h)}</th>`).join('') + '</tr>';
+        wd.dataClassification.forEach(item => {
+            html += '<tr>' + headers.map(h => `<td style="border:1px solid #ddd;padding:4px;">${escapeHtml(item[h] || '')}</td>`).join('') + '</tr>';
+        });
+        html += '</table></div>';
+    }
+
+    html += '</div>';
+    return html;
+}
+
+function batchSetByL3(l1, l2, l3, result) {
+    batchSetByResult(tpl => tpl.l1 === l1 && tpl.l2 === l2 && tpl.l3 === l3, result);
 }
 function deleteCurrentProject() {
     if (!requirePermission('delete', '删除项目')) return;

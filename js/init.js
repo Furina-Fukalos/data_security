@@ -6,6 +6,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // 初始化认证系统
     initAuth();
     
+    // 应用已导入的评估准则覆盖（如存在，导入的「评估位置/评估实施/适用对象」生效）
+    try { applyStoredCriteria(); } catch (e) { console.error('应用已导入准则失败:', e); }
+    
     // 只有登录后才渲染项目列表
     const user = getCurrentUser();
     if (user) {

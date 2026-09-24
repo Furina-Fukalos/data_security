@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>数据安全管理评估系统</title>
-<script src="vendor/xlsx-js-style.min.js"></script>
-<script src="vendor/echarts.min.js"></script>
+<script src="js/libs.js"></script>
 <script src="js/template.js"></script>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -85,6 +84,10 @@
     <div class="card">
       <div class="card-header">
         <h3>📊 评估项目列表</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-default btn-sm" onclick="showReportImportModal()" title="导入《数据安全风险评估报告》PDF，识别单位/系统信息与测评指标记录">📄 导入报告</button>
+          <button class="btn btn-default btn-sm" onclick="showCriteriaImportModal()" title="导入《数据安全评估评估准则》Excel，更新准则模板或创建评估项目">📥 导入准则Excel</button>
+        </div>
       </div>
       <div class="card-body">
         <input type="text" class="search-box" id="searchBox" placeholder="🔍 搜索项目名称或评估对象..." oninput="renderProjectList()">
@@ -106,7 +109,16 @@
       <button class="back-btn" onclick="backToDashboard()">← 返回项目列表</button>
     </div>
 
-    <div class="card" style="margin-bottom:20px;">
+    <!-- 区块导航：长页面快速定位（不改变原有内容） -->
+    <div class="section-nav" id="projectSectionNav">
+      <button class="section-nav-btn active" data-section="overviewCard" onclick="scrollToSection('overviewCard')">📋 项目信息</button>
+      <button class="section-nav-btn" data-section="scoreCard" onclick="scrollToSection('scoreCard')">🏆 评分结果</button>
+      <button class="section-nav-btn" data-section="riskCard" onclick="scrollToSection('riskCard')">⚠️ 风险源</button>
+      <button class="section-nav-btn" data-section="chartCard" onclick="scrollToSection('chartCard')">📈 图表</button>
+      <button class="section-nav-btn" data-section="treeCard" onclick="scrollToSection('treeCard')">📝 指标填写</button>
+    </div>
+
+    <div class="card" id="overviewCard" style="margin-bottom:20px;">
       <div class="card-header">
         <h3 id="projectTitle">项目详情</h3>
         <div>
@@ -124,7 +136,7 @@
         <h3>🏆 评估评分结果</h3>
         <div>
           <button class="btn btn-primary btn-sm" onclick="generateFinalScore()">📊 生成评分</button>
-          <button class="btn btn-default btn-sm" onclick="exportScoreReport()" style="margin-left:8px;">📋 导出报告</button>
+          <button class="btn btn-default btn-sm" onclick="showReportModal()" style="margin-left:8px;">📋 导出报告</button>
         </div>
       </div>
       <div class="card-body" id="scoreResult"></div>
@@ -146,7 +158,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="chartCard">
       <div class="card-header">
         <h3>📈 评估进度可视化</h3>
       </div>
@@ -160,7 +172,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="treeCard">
       <div class="card-header">
         <h3>📝 评估指标填写</h3>
       </div>
@@ -175,16 +187,21 @@
             <option value="符合">✅ 符合</option>
             <option value="部分符合">⚠️ 部分符合</option>
             <option value="不符合">❌ 不符合</option>
+            <option value="不适用">⛔ 不适用</option>
             <option value="未评估">未评估</option>
           </select>
           <select id="filterApplicable" onchange="renderTree()">
             <option value="">适用对象筛选</option>
             <option value="重要数据和核心数据处理者">重要数据和核心数据处理者</option>
+            <option value="核心数据处理者">核心数据处理者</option>
             <option value="被评估对象使用云计算服务时">使用云计算服务</option>
             <option value="被评估对象是云计算服务提供者时">是云计算服务提供者</option>
             <option value="涉及政务部门">涉及政务部门</option>
+            <option value="因合并、分立、解散、被宣告破产等原因向外转移数据，或承接其他数据处理者转移数据">合并/分立/解散等转移数据</option>
+            <option value="因合并、分立、解散、被宣告破产等原因需要转移个人信息的">合并/分立/解散等转移个人信息</option>
+            <option value="对于两个以上的个人信息处理者共同决定个人信息的处理目的和处理方式的">共同决定个人信息处理</option>
           </select>
-          <input type="text" id="itemSearch" placeholder="搜索评估指引内容..." style="padding:7px 12px;border:1px solid #ddd;border-radius:4px;font-size:13px;width:250px;" oninput="renderTree()">
+          <input type="text" id="itemSearch" placeholder="搜索评估指引内容..." style="padding:7px 12px;border:1px solid #ddd;border-radius:4px;font-size:13px;width:250px;" oninput="scheduleRenderTree()">
         </div>
         <div id="treeContainer"></div>
       </div>
@@ -194,12 +211,28 @@
 
 <!-- Create Project Modal -->
 <div class="modal-overlay" id="createProjectModal" style="display:none;">
-  <div class="modal">
+  <div class="modal" style="width:680px;">
     <div class="modal-header">
       <h3>创建评估项目</h3>
       <button class="modal-close" onclick="hideCreateProjectModal()">×</button>
     </div>
     <div class="modal-body">
+      <!-- Word导入区域 -->
+      <div style="margin-bottom:16px;padding:14px;background:linear-gradient(135deg,#e8f5e9,#e3f2fd);border-radius:8px;border:1px solid #a5d6a7;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-weight:600;color:#2e7d32;font-size:14px;">📄 导入Word调研表</div>
+            <div style="font-size:12px;color:#666;margin-top:2px;">上传《数据安全风险评估系统信息调研表》.docx，自动识别并填充项目信息</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <input type="file" id="wordFileInput" accept=".docx" style="display:none;" onchange="handleWordImport(this.files[0]); this.value='';">
+            <button class="btn btn-success btn-sm" id="importWordBtn" onclick="triggerWordImport()">📤 选择Word文件</button>
+            <button class="btn btn-default btn-sm" onclick="clearImportedWordData()">清除</button>
+          </div>
+        </div>
+        <div id="wordImportPreview" style="display:none;margin-top:10px;"></div>
+      </div>
+
       <div class="form-group">
         <label>项目名称 *</label>
         <input type="text" id="projectName" placeholder="例如：XX公司2024年度数据安全评估">
@@ -225,15 +258,188 @@
         <select id="projectApplicable">
           <option value="">全部适用对象</option>
           <option value="重要数据和核心数据处理者">重要数据和核心数据处理者</option>
+          <option value="核心数据处理者">核心数据处理者</option>
           <option value="被评估对象使用云计算服务时">使用云计算服务</option>
           <option value="被评估对象是云计算服务提供者时">是云计算服务提供者</option>
           <option value="涉及政务部门">涉及政务部门</option>
+          <option value="因合并、分立、解散、被宣告破产等原因向外转移数据，或承接其他数据处理者转移数据">合并/分立/解散等转移数据</option>
+          <option value="因合并、分立、解散、被宣告破产等原因需要转移个人信息的">合并/分立/解散等转移个人信息</option>
+          <option value="对于两个以上的个人信息处理者共同决定个人信息的处理目的和处理方式的">共同决定个人信息处理</option>
         </select>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-default" onclick="hideCreateProjectModal()">取消</button>
       <button class="btn btn-primary" onclick="createProject()">创建项目</button>
+    </div>
+  </div>
+</div>
+
+<!-- Criteria Import Modal -->
+<div class="modal-overlay" id="criteriaImportModal" style="display:none;">
+  <div class="modal" style="width:740px;max-height:92vh;">
+    <div class="modal-header">
+      <h3>📥 导入评估准则（Excel）</h3>
+      <button class="modal-close" onclick="hideCriteriaImportModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="padding:12px 14px;background:#e3f2fd;border-radius:8px;border:1px solid #90caf9;margin-bottom:16px;font-size:13px;color:#0d47a1;line-height:1.8;">
+        支持导入《数据安全评估评估准则v1-20260525.xlsx》等准则文件（自动识别「一、数据安全管理 / 二、数据处理活动 / 三、数据安全技术 / 四、个人信息保护」四个维度工作表）。<br>
+        <strong>① 更新评估准则模板</strong>：为评估指标补充「📍 评估位置」「🔧 评估实施」提示并修正「适用对象」标注（保存在本浏览器，可一键恢复内置准则）。<br>
+        <strong>② 导入为评估项目</strong>：将文件中的评估记录与判定结果（基本符合→部分符合，含「不适用」）建成一个新项目。
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
+        <input type="file" id="criteriaFileInput" accept=".xlsx,.xls" style="display:none;" onchange="handleCriteriaFile(this.files[0]); this.value='';">
+        <button class="btn btn-primary" onclick="document.getElementById('criteriaFileInput').click()">📂 选择准则Excel文件</button>
+        <span id="criteriaFileName" style="font-size:13px;color:#666;"></span>
+        <div style="margin-left:auto;font-size:12px;color:#888;">
+          当前准则：<span id="criteriaStatusText">内置</span>
+          <button class="btn btn-default btn-sm" id="criteriaRestoreBtn" style="display:none;margin-left:8px;" onclick="restoreBuiltinCriteria()">恢复内置</button>
+        </div>
+      </div>
+
+      <div id="criteriaParseStatus" style="display:none;font-size:13px;color:#333;margin-bottom:12px;"></div>
+      <div id="criteriaSummary" style="display:none;margin-bottom:14px;"></div>
+
+      <div id="criteriaOptions" style="display:none;">
+        <div style="font-weight:600;margin-bottom:8px;font-size:14px;">导入方式</div>
+        <label style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px;cursor:pointer;background:#fafafa;">
+          <input type="checkbox" id="criteriaOptTemplate" checked style="margin-top:2px;">
+          <span style="font-size:13px;line-height:1.7;">
+            <strong>① 更新评估准则模板</strong><br>
+            <span style="color:#666;">为评估指标详情页补充「📍 评估位置」「🔧 评估实施」提示，并按文件修正「适用对象」标注。后续新建的项目都将使用更新后的准则。</span>
+          </span>
+        </label>
+        <label style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:12px;cursor:pointer;background:#fafafa;">
+          <input type="checkbox" id="criteriaOptProject" checked style="margin-top:2px;">
+          <span style="font-size:13px;line-height:1.7;">
+            <strong>② 导入为评估项目</strong><br>
+            <span style="color:#666;">创建新项目，并填入文件中的评估记录与判定结果（基本符合归一化为「部分符合」，支持「不适用」）。</span>
+          </span>
+        </label>
+
+        <div id="criteriaProjectFields" style="padding:12px;border:1px solid #e0e0e0;border-radius:8px;background:#fcfcfc;margin-bottom:8px;">
+          <div class="form-group">
+            <label>项目名称 *</label>
+            <input type="text" id="criteriaProjectName" placeholder="例如：XX公司2025年度数据安全评估">
+          </div>
+          <div class="form-group">
+            <label>评估对象 *</label>
+            <input type="text" id="criteriaProjectTarget" placeholder="例如：XX科技有限公司">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px;">
+            <div class="form-group">
+              <label>评估人员</label>
+              <input type="text" id="criteriaProjectEvaluator">
+            </div>
+            <div class="form-group">
+              <label>评估日期</label>
+              <input type="date" id="criteriaProjectDate">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>适用对象预设筛选</label>
+            <select id="criteriaProjectApplicable">
+              <option value="">全部适用对象</option>
+              <option value="重要数据和核心数据处理者">重要数据和核心数据处理者</option>
+              <option value="核心数据处理者">核心数据处理者</option>
+              <option value="被评估对象使用云计算服务时">使用云计算服务</option>
+              <option value="被评估对象是云计算服务提供者时">是云计算服务提供者</option>
+              <option value="涉及政务部门">涉及政务部门</option>
+              <option value="因合并、分立、解散、被宣告破产等原因向外转移数据，或承接其他数据处理者转移数据">合并/分立/解散等转移数据</option>
+              <option value="因合并、分立、解散、被宣告破产等原因需要转移个人信息的">合并/分立/解散等转移个人信息</option>
+              <option value="对于两个以上的个人信息处理者共同决定个人信息的处理目的和处理方式的">共同决定个人信息处理</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-default" onclick="hideCriteriaImportModal()">取消</button>
+      <button class="btn btn-primary" id="criteriaImportConfirm" style="display:none;" onclick="confirmCriteriaImport()">✅ 确认导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- Report Modal -->
+<div class="modal-overlay" id="reportModal" style="display:none;">
+  <div class="modal" style="width:1040px;max-width:96vw;max-height:94vh;">
+    <div class="modal-header">
+      <h3>📋 评估报告（测评结论 + 整改建议）</h3>
+      <button class="modal-close" onclick="hideReportModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="reportSummary"></div>
+      <div style="font-weight:600;font-size:13px;color:#333;margin:6px 0 8px;">报告预览</div>
+      <iframe id="reportPreviewFrame" title="报告预览"
+              style="width:100%;height:52vh;border:1px solid #ddd;border-radius:8px;background:#fff;"></iframe>
+    </div>
+    <div class="modal-footer">
+      <span style="font-size:12px;color:#888;">HTML 报告可在浏览器中直接打印或另存为 PDF</span>
+      <button class="btn btn-default" onclick="hideReportModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Report Import Modal -->
+<div class="modal-overlay" id="reportImportModal" style="display:none;">
+  <div class="modal" style="width:900px;max-width:96vw;max-height:94vh;">
+    <div class="modal-header">
+      <h3>📄 导入评估报告（PDF）</h3>
+      <button class="modal-close" onclick="hideReportImportModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="padding:12px 14px;background:#e8f5e9;border-radius:8px;border:1px solid #a5d6a7;margin-bottom:16px;font-size:13px;color:#1b5e20;line-height:1.8;">
+        导入《数据安全风险评估报告》PDF，自动识别报告中的<b>单位名称、系统信息</b>与<b>测评指标记录</b>（评估项 / 评估记录 / 判定结果），
+        生成可继续修改的评估项目。<br>
+        测评项将作为<b>该项目的专属指标清单</b>（不影响系统内置的 477 项准则与其他项目）；报告中有、而系统没有对应字段的信息（如风险源描述、风险等级等）<b>不做导入</b>。
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
+        <input type="file" id="reportFileInput" accept=".pdf" style="display:none;"
+               onchange="handleReportFile(this.files[0]); this.value='';">
+        <button class="btn btn-primary" onclick="document.getElementById('reportFileInput').click()">📂 选择报告 PDF</button>
+        <span id="reportFileName" style="font-size:13px;color:#666;"></span>
+      </div>
+
+      <div id="reportParseStatus" style="display:none;font-size:13px;color:#333;margin-bottom:12px;"></div>
+
+      <div id="reportPreview" style="display:none;">
+        <div id="reportPreviewInner"></div>
+        <div style="margin-top:14px;padding:12px;border:1px solid #e0e0e0;border-radius:8px;background:#fcfcfc;">
+          <div style="font-weight:600;font-size:14px;margin-bottom:8px;">项目信息（可修改后导入）</div>
+          <div class="form-group">
+            <label>项目名称 *</label>
+            <input type="text" id="reportProjectName" placeholder="例如：XX系统数据安全风险评估">
+          </div>
+          <div class="form-group">
+            <label>评估对象 *</label>
+            <input type="text" id="reportProjectTarget" placeholder="被评估单位名称">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px;">
+            <div class="form-group">
+              <label>评估人员</label>
+              <input type="text" id="reportProjectEvaluator">
+            </div>
+            <div class="form-group">
+              <label>评估日期</label>
+              <input type="date" id="reportProjectDate">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>项目描述</label>
+            <textarea id="reportProjectDesc" rows="3" placeholder="被评估对象描述"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span style="font-size:12px;color:#888;">仅支持 PDF 报告；首次解析需加载 PDF 组件</span>
+      <div>
+        <button class="btn btn-default" onclick="hideReportImportModal()">取消</button>
+        <button class="btn btn-primary" id="reportImportConfirm" style="display:none;margin-left:8px;" onclick="confirmReportImport()">✅ 确认导入</button>
+      </div>
     </div>
   </div>
 </div>
@@ -327,7 +533,8 @@
     <div class="item-modal-footer">
       <button class="nav-btn" id="prevItemBtn" onclick="navigateItem(-1)">← 上一个</button>
       <span class="nav-counter" id="itemNavCounter"></span>
-      <div style="display:flex;gap:10px;">
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span class="kbd-hint" title="1=符合 2=部分符合 3=不符合 4=不适用 / Ctrl+S 保存 / Alt+↓ 下一条未评估">⌨️ 1-4 判定 · Ctrl+S 保存 · Alt+↓ 未评估</span>
         <button class="nav-btn" id="nextItemBtn" onclick="navigateItem(1)">下一个 →</button>
         <button class="save-btn" onclick="saveAndCloseItem()">💾 保存并关闭</button>
       </div>
@@ -411,12 +618,17 @@
 <script src="js/state.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/storage.js"></script>
+<script src="js/stats.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/project.js"></script>
+<script src="js/report.js"></script>
 <script src="js/risk.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/import-export.js"></script>
+<script src="js/word-import.js"></script>
+<script src="js/criteria-import.js"></script>
+<script src="js/report-import.js"></script>
 <script src="js/init.js"></script>
 
 </body>

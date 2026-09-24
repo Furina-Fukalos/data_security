@@ -11,10 +11,14 @@ function showCreateProjectModal() {
     if (user) {
         document.getElementById('projectEvaluator').value = user.name;
     }
+    // 清除之前的Word导入数据
+    clearImportedWordData();
 }
 
 function hideCreateProjectModal() {
     document.getElementById('createProjectModal').style.display = 'none';
+    // 清除Word导入数据
+    clearImportedWordData();
 }
 
 function createProject() {
@@ -58,15 +62,26 @@ function createProject() {
             };
         });
 
+        // 保存Word调研表导入的额外数据
+        const wordData = getImportedWordData();
+        if (wordData) {
+            project.wordSurveyData = {
+                basicInfo: wordData.basicInfo,
+                systemDesc: wordData.systemDesc,
+                dataAssets: wordData.dataAssets,
+                dataClassification: wordData.dataClassification
+            };
+        }
+
         saveProject(project);
         hideCreateProjectModal();
-        
+
         // Clear form
         document.getElementById('projectName').value = '';
         document.getElementById('projectTarget').value = '';
         document.getElementById('projectEvaluator').value = '';
         document.getElementById('projectDesc').value = '';
-        
+
         renderProjectList();
         openProject(project.id);
     } catch (err) {
@@ -76,24 +91,13 @@ function createProject() {
 }
 function updateDashboardStats() {
     const projects = getProjects();
-    let totalItems = 0;
-    let completedItems = 0;
-    
-    projects.forEach(p => {
-        const items = p.items ? Object.values(p.items) : [];
-        items.forEach(item => {
-            totalItems++;
-            if (item && (item.result === '符合' || item.result === '不符合' || item.result === '部分符合')) {
-                completedItems++;
-            }
-        });
-    });
 
+    // 完成度 ≥90% 视为已完成（统计口径与项目页统一走 stats.js）
     const completedProjects = projects.filter(p => {
-        const items = p.items ? Object.values(p.items) : [];
-        if (items.length === 0) return false;
-        const done = items.filter(i => i && i.result).length;
-        return done >= items.length * 0.9;
+        if (!p.items) return false;
+        const s = computeItemStats(p, false);
+        if (s.total === 0) return false;
+        return s.assessed >= s.total * 0.9;
     }).length;
 
     document.getElementById('statProjects').textContent = projects.length;
@@ -135,9 +139,9 @@ function renderProjectList() {
         '<th>项目名称</th><th>评估对象</th><th>评估人员</th><th>日期</th><th>进度</th><th>操作</th></tr></thead><tbody>';
     
     filtered.forEach(p => {
-        const items = p.items ? Object.values(p.items) : [];
-        const done = items.filter(i => i && i.result).length;
-        const pct = items.length > 0 ? Math.round(done / items.length * 100) : 0;
+        const s = computeItemStats(p, false);
+        const done = s.assessed;
+        const pct = s.total > 0 ? Math.round(done / s.total * 100) : 0;
         
         let progressClass = 'progress-fill-success';
         if (pct < 60) progressClass = 'progress-fill-danger';
@@ -152,7 +156,7 @@ function renderProjectList() {
                 <td>${escapeHtml(p.evaluator || '-')}</td>
                 <td>${p.date || '-'}</td>
                 <td style="min-width:150px;">
-                    <div style="font-size:12px;margin-bottom:4px;">${done}/${items.length} (${pct}%)</div>
+                    <div style="font-size:12px;margin-bottom:4px;">${done}/${s.total} (${pct}%)</div>
                     <div class="progress-bar"><div class="fill ${progressClass}" style="width:${pct}%"></div></div>
                 </td>
                 <td>
@@ -223,15 +227,15 @@ function batchDeleteProjects() {
     renderProjectList();
 }
 
-function batchExportExcel() {
+async function batchExportExcel() {
     if (selectedProjectIds.size === 0) return;
     const projects = getProjects();
     const selected = projects.filter(p => selectedProjectIds.has(p.id));
     
-    // Export each as a separate Excel file
-    selected.forEach(p => {
-        exportProjectToExcel(p.id);
-    });
+    // 并行导出（Excel 组件只加载一次）
+    for (const p of selected) {
+        await exportProjectToExcel(p.id);
+    }
     alert(`已导出 ${selected.length} 个项目的Excel文件`);
 }
 

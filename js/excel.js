@@ -1,8 +1,8 @@
 // ============================================
-// Excel 导出
+// Excel 导出（xlsx-js-style 按需加载）
 // ============================================
 
-function exportProjectToExcel(projectId) {
+async function exportProjectToExcel(projectId) {
     const pid = projectId || currentProjectId;
     const project = getProject(pid);
     if (!project) {
@@ -10,7 +10,21 @@ function exportProjectToExcel(projectId) {
         return;
     }
 
+    // Excel 组件按需加载
+    try {
+        await loadLib('xlsx');
+    } catch (err) {
+        alert('Excel 组件加载失败：' + err.message);
+        return;
+    }
+
     const wb = XLSX.utils.book_new();
+    // 项目专属准则（报告导入的项目）优先，否则使用内置模板
+    const criteria = getProjectCriteria(project);
+    if (!criteria || criteria.length === 0) {
+        alert('该项目没有可导出的评估指标。');
+        return;
+    }
 
     // ===== 列宽（匹配优化版）=====
     const colWidths = [{ wch: 12 }, { wch: 13 }, { wch: 17 }, { wch: 52 }, { wch: 14 }, { wch: 19 }, { wch: 12 }];
@@ -89,7 +103,7 @@ function exportProjectToExcel(projectId) {
     const rows = [headerRow];
 
     let curL1 = '', curL2 = '', curL3 = '';
-    TEMPLATE.forEach((tpl, idx) => {
+    criteria.forEach((tpl, idx) => {
         const item = project.items[idx] || { record: '', result: '' };
         const l1Val = tpl.l1 !== curL1 ? tpl.l1 : '';
         const l2Val = tpl.l2 !== curL2 ? tpl.l2 : '';
@@ -109,14 +123,14 @@ function exportProjectToExcel(projectId) {
 
     // ===== 合并单元格 =====
     const merges = [];
-    let currentL1 = TEMPLATE[0].l1;
-    let currentL2 = TEMPLATE[0].l2;
-    let currentL3 = TEMPLATE[0].l3;
-    let currentApplicable = TEMPLATE[0].applicable || '';
+    let currentL1 = criteria[0].l1;
+    let currentL2 = criteria[0].l2;
+    let currentL3 = criteria[0].l3;
+    let currentApplicable = criteria[0].applicable || '';
     let l1Start = 1, l2Start = 1, l3Start = 1, appStart = 1;
 
-    for (let i = 0; i < TEMPLATE.length; i++) {
-        const tpl = TEMPLATE[i];
+    for (let i = 0; i < criteria.length; i++) {
+        const tpl = criteria[i];
         const rowIdx = i + 1; // 0-based row in sheet (header is row 0)
 
         if (tpl.l1 !== currentL1) {
@@ -143,7 +157,7 @@ function exportProjectToExcel(projectId) {
             currentApplicable = appVal;
         }
     }
-    const lastRowIdx = TEMPLATE.length;
+    const lastRowIdx = criteria.length;
     if (lastRowIdx > l1Start) merges.push({ s: { r: l1Start, c: 0 }, e: { r: lastRowIdx, c: 0 } });
     if (lastRowIdx > l2Start) merges.push({ s: { r: l2Start, c: 1 }, e: { r: lastRowIdx, c: 1 } });
     if (lastRowIdx > l3Start) merges.push({ s: { r: l3Start, c: 2 }, e: { r: lastRowIdx, c: 2 } });
@@ -160,7 +174,7 @@ function exportProjectToExcel(projectId) {
                 // 表头
                 ws[cellRef].s = headerStyle;
             } else {
-                const tpl = TEMPLATE[R - 1];
+                const tpl = criteria[R - 1];
                 const item = project.items[R - 1] || { record: '', result: '' };
                 switch (C) {
                     case 0: ws[cellRef].s = l1Style; break;
@@ -171,10 +185,13 @@ function exportProjectToExcel(projectId) {
                     case 5: ws[cellRef].s = recordStyle; break;
                     case 6: {
                         const val = item.result || '';
-                        let style = Object.assign({}, resultBaseStyle);
-                        if (val === '符合') style.font = Object.assign({}, style.font, { color: { rgb: '2E7D32' } });
-                        else if (val === '部分符合') style.font = Object.assign({}, style.font, { color: { rgb: 'ED6C02' } });
-                        else if (val === '不符合') style.font = Object.assign({}, style.font, { color: { rgb: 'C62828' } });
+                        const style = Object.assign({}, resultBaseStyle);
+                        // 判定结果配色统一取自 stats.js（单一数据源）
+                        if (val) {
+                            style.font = Object.assign({}, style.font, {
+                                color: { rgb: getResultColor(val).replace('#', '').toUpperCase() }
+                            });
+                        }
                         ws[cellRef].s = style;
                         break;
                     }
@@ -185,8 +202,8 @@ function exportProjectToExcel(projectId) {
 
     // ===== 行高 =====
     ws['!rows'] = [{ hpt: 32 }];
-    for (let i = 0; i < TEMPLATE.length; i++) {
-        const tpl = TEMPLATE[i];
+    for (let i = 0; i < criteria.length; i++) {
+        const tpl = criteria[i];
         const item = project.items[i] || { record: '', result: '' };
         const guidanceLines = Math.max(1, Math.ceil(tpl.guidance.length / 24));
         const appLines = tpl.applicable ? Math.max(1, Math.ceil(tpl.applicable.length / 7)) : 1;
@@ -198,10 +215,12 @@ function exportProjectToExcel(projectId) {
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
 
     // ===== 项目信息页 =====
-    const passCount = Object.values(project.items).filter(i => i.result === '符合').length;
-    const partialCount = Object.values(project.items).filter(i => i.result === '部分符合').length;
-    const failCount = Object.values(project.items).filter(i => i.result === '不符合').length;
-    const unassessedCount = Object.values(project.items).filter(i => !i.result).length;
+    const stats = computeItemStats(project);
+    const passCount = stats.pass;
+    const partialCount = stats.partial;
+    const failCount = stats.fail;
+    const naCount = stats.na;
+    const unassessedCount = stats.unassessed;
 
     const infoData = [
         ['评估项目信息'],
@@ -213,10 +232,11 @@ function exportProjectToExcel(projectId) {
         ['项目描述', project.desc || ''],
         ['', ''],
         ['评估统计'],
-        ['评估项总数', TEMPLATE.length],
+        ['评估项总数', criteria.length],
         ['符合', passCount],
         ['部分符合', partialCount],
         ['不符合', failCount],
+        ['不适用', naCount],
         ['未评估', unassessedCount]
     ];
 

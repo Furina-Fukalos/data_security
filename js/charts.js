@@ -1,56 +1,70 @@
 // ============================================
-// 图表渲染（ECharts）
+// 图表渲染（ECharts，按需加载）
+// 数据统一来自 stats.js，避免各图表重复统计口径
 // ============================================
 
-function renderChart(project, chartType) {
+/**
+ * 渲染评估进度图
+ * @param {Object} project 项目
+ * @param {'bar'|'radar'|'pie'} [chartType] 图表类型，缺省沿用当前类型
+ */
+async function renderChart(project, chartType) {
     const chartDom = document.getElementById('chart');
     if (!chartDom) return;
-    
-    // Adjust container class based on chart type
-    if (chartType === 'radar') {
+    if (!project) project = getProject(currentProjectId);
+    if (!project) return;
+
+    const type = chartType || currentChartType || 'bar';
+
+    // 图表库按需加载（首次进入项目页时才拉取 echarts）
+    let echartsLib;
+    try {
+        echartsLib = await loadLib('echarts');
+    } catch (err) {
+        console.error('图表库加载失败:', err);
+        return;
+    }
+    if (!document.getElementById('chart')) return; // 等待期间可能已离开项目页
+
+    // 调整容器类名（雷达图需要更高的容器）
+    if (type === 'radar') {
         chartDom.classList.add('radar-chart');
     } else {
         chartDom.classList.remove('radar-chart');
     }
-    
-    if (chartInstance) {
-        chartInstance.dispose();
-    }
-    chartInstance = echarts.init(chartDom);
 
-    // Build data by L1
-    const l1Data = {};
-    TEMPLATE.forEach((tpl, idx) => {
-        if (!l1Data[tpl.l1]) {
-            l1Data[tpl.l1] = { total: 0, pass: 0, partial: 0, fail: 0 };
-        }
-        l1Data[tpl.l1].total++;
-        const item = project.items[idx];
-        if (item) {
-            if (item.result === '符合') l1Data[tpl.l1].pass++;
-            else if (item.result === '部分符合') l1Data[tpl.l1].partial++;
-            else if (item.result === '不符合') l1Data[tpl.l1].fail++;
-        }
+    // 复用实例：仅切换图表类型或实例已销毁时重建，避免每次编辑指标都销毁重建
+    const prevType = currentChartType;
+    if (chartInstance && (chartInstance.isDisposed() || type !== prevType)) {
+        chartInstance.dispose();
+        chartInstance = null;
+    }
+    if (!chartInstance) {
+        chartInstance = echartsLib.init(chartDom);
+    } else {
+        chartInstance.resize();
+    }
+    currentChartType = type;
+
+    // 同步图表切换页签的高亮状态
+    const TABS = ['bar', 'radar', 'pie'];
+    document.querySelectorAll('.chart-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', TABS[i] === type);
     });
 
-    const categories = Object.keys(l1Data);
-    
-    if (chartType === 'radar') {
+    const l1Stats = computeL1Stats(project);
+    const categories = Object.keys(l1Stats);
+
+    if (type === 'radar') {
         // Radar chart
         const indicator = categories.map(c => ({
             name: c.replace(/^[一二三四五六七八九十]+、/, '').replace(/[（）()]/g, ''),
-            max: l1Data[c].total
+            max: Math.max(1, l1Stats[c].scored)
         }));
-        
-        const completedData = categories.map(c => l1Data[c].pass + l1Data[c].partial * 0.5);
-        const totalData = categories.map(c => l1Data[c].total);
-        
-        // Calculate scores per dimension for tooltip
-        const dimensionScores = categories.map((c, i) => {
-            const total = l1Data[c].total;
-            const score = total > 0 ? Math.round(100 * (l1Data[c].pass + 0.5 * l1Data[c].partial) / total) : 0;
-            return Math.min(100, score);
-        });
+
+        const completedData = categories.map(c => l1Stats[c].pass + l1Stats[c].partial * 0.5);
+        const totalData = categories.map(c => l1Stats[c].scored); // 不适用项不计入评分基数
+        const dimensionScores = categories.map(c => Math.min(100, l1Stats[c].score));
 
         const option = {
             tooltip: {
@@ -70,8 +84,8 @@ function renderChart(project, chartType) {
                     return `${params.seriesName}`;
                 }
             },
-            legend: { 
-                data: ['评估得分', '满分基准'], 
+            legend: {
+                data: ['评估得分', '满分基准'],
                 top: 5,
                 textStyle: { fontSize: 12 }
             },
@@ -84,8 +98,8 @@ function renderChart(project, chartType) {
                 splitNumber: 4,
                 center: ['50%', '54%'],
                 radius: '60%',
-                axisName: { 
-                    color: '#333', 
+                axisName: {
+                    color: '#333',
                     fontSize: 12,
                     fontWeight: 500
                 },
@@ -96,17 +110,17 @@ function renderChart(project, chartType) {
                 symbol: 'circle',
                 symbolSize: 6,
                 data: [
-                    { 
-                        value: completedData, 
-                        name: '评估得分', 
-                        areaStyle: { color: 'rgba(26,35,126,0.25)' }, 
-                        lineStyle: { color: '#1a237e', width: 2 }, 
-                        itemStyle: { color: '#1a237e' } 
+                    {
+                        value: completedData,
+                        name: '评估得分',
+                        areaStyle: { color: 'rgba(26,35,126,0.25)' },
+                        lineStyle: { color: '#1a237e', width: 2 },
+                        itemStyle: { color: '#1a237e' }
                     },
-                    { 
-                        value: totalData, 
-                        name: '满分基准', 
-                        lineStyle: { color: '#bdbdbd', type: 'dashed', width: 1.5 }, 
+                    {
+                        value: totalData,
+                        name: '满分基准',
+                        lineStyle: { color: '#bdbdbd', type: 'dashed', width: 1.5 },
                         itemStyle: { color: '#999' },
                         areaStyle: { color: 'rgba(189,189,189,0.1)' }
                     }
@@ -114,16 +128,10 @@ function renderChart(project, chartType) {
             }]
         };
         chartInstance.setOption(option, true);
-    } else if (chartType === 'pie') {
+    } else if (type === 'pie') {
         // Pie chart showing overall distribution
-        let pass = 0, partial = 0, fail = 0, unassessed = 0;
-        Object.values(project.items).forEach(item => {
-            if (item.result === '符合') pass++;
-            else if (item.result === '部分符合') partial++;
-            else if (item.result === '不符合') fail++;
-            else unassessed++;
-        });
-        
+        const s = computeItemStats(project);
+
         const option = {
             tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
             legend: { orient: 'vertical', left: 'left' },
@@ -134,42 +142,43 @@ function renderChart(project, chartType) {
                 itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
                 label: { show: true, formatter: '{b}: {c}' },
                 data: [
-                    { value: pass, name: '符合', itemStyle: { color: '#2e7d32' } },
-                    { value: partial, name: '部分符合', itemStyle: { color: '#ed6c02' } },
-                    { value: fail, name: '不符合', itemStyle: { color: '#c62828' } },
-                    { value: unassessed, name: '未评估', itemStyle: { color: '#bdbdbd' } }
+                    { value: s.pass, name: '符合', itemStyle: { color: getResultColor('符合') } },
+                    { value: s.partial, name: '部分符合', itemStyle: { color: getResultColor('部分符合') } },
+                    { value: s.fail, name: '不符合', itemStyle: { color: getResultColor('不符合') } },
+                    { value: s.na, name: '不适用', itemStyle: { color: getResultColor('不适用') } },
+                    { value: s.unassessed, name: '未评估', itemStyle: { color: '#bdbdbd' } }
                 ]
             }]
         };
-        chartInstance.setOption(option);
+        chartInstance.setOption(option, true);
     } else {
         // Bar chart (default)
-        const passData = categories.map(c => l1Data[c].pass);
-        const partialData = categories.map(c => l1Data[c].partial);
-        const failData = categories.map(c => l1Data[c].fail);
-        const totalData = categories.map(c => l1Data[c].total);
+        const passData = categories.map(c => l1Stats[c].pass);
+        const partialData = categories.map(c => l1Stats[c].partial);
+        const failData = categories.map(c => l1Stats[c].fail);
+        const naData = categories.map(c => l1Stats[c].na);
+        const totalData = categories.map(c => l1Stats[c].total);
 
         const option = {
             tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-            legend: { data: ['符合', '部分符合', '不符合', '总数'], top: 5 },
+            legend: { data: ['符合', '部分符合', '不符合', '不适用', '总数'], top: 5 },
             grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
             xAxis: { type: 'category', data: categories, axisLabel: { fontSize: 11, interval: 0 } },
             yAxis: { type: 'value', name: '数量' },
             series: [
-                { name: '符合', type: 'bar', stack: 'total', data: passData, itemStyle: { color: '#2e7d32' } },
-                { name: '部分符合', type: 'bar', stack: 'total', data: partialData, itemStyle: { color: '#ed6c02' } },
-                { name: '不符合', type: 'bar', stack: 'total', data: failData, itemStyle: { color: '#c62828' } },
+                { name: '符合', type: 'bar', stack: 'total', data: passData, itemStyle: { color: getResultColor('符合') } },
+                { name: '部分符合', type: 'bar', stack: 'total', data: partialData, itemStyle: { color: getResultColor('部分符合') } },
+                { name: '不符合', type: 'bar', stack: 'total', data: failData, itemStyle: { color: getResultColor('不符合') } },
+                { name: '不适用', type: 'bar', stack: 'total', data: naData, itemStyle: { color: getResultColor('不适用') } },
                 { name: '总数', type: 'line', data: totalData, itemStyle: { color: '#1a237e' }, lineStyle: { width: 2 } }
             ]
         };
-        chartInstance.setOption(option);
+        chartInstance.setOption(option, true);
     }
 }
 
 function switchChartType(type) {
     const project = getProject(currentProjectId);
     if (!project) return;
-    document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
-    renderChart(project, type);
+    renderChart(project, type); // 页签高亮由 renderChart 统一同步
 }

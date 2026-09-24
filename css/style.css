@@ -100,6 +100,7 @@ tr:hover { background: #f9f9f9; }
 .tree-item .status-badge.pass { background: #e8f5e9; color: #2e7d32; }
 .tree-item .status-badge.partial { background: #fff3e0; color: #ed6c02; }
 .tree-item .status-badge.fail { background: #ffebee; color: #c62828; }
+.tree-item .status-badge.na { background: #eceff1; color: #607d8b; }
 .tree-item .item-applicable-tag { font-size: 11px; color: #9c27b0; background: #f3e5f5; padding: 2px 6px; border-radius: 8px; }
 
 /* 评估浮框模态 */
@@ -118,6 +119,11 @@ tr:hover { background: #f9f9f9; }
 .item-guidance-section { background: #f5f7ff; border: 1px solid #e8eaf6; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
 .item-guidance-section h4 { font-size: 13px; color: #1a237e; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
 .item-guidance-text { font-size: 14px; color: #333; line-height: 1.7; }
+.item-info-section { background: #e0f7fa; border: 1px solid #b2ebf2; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+.item-info-section h4 { font-size: 13px; color: #006064; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.item-info-section.implement { background: #f1f8e9; border-color: #dcedc8; }
+.item-info-section.implement h4 { color: #33691e; }
+.item-info-text { font-size: 13px; color: #333; line-height: 1.7; white-space: pre-wrap; }
 .item-meta-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .item-meta-row .meta-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: #e8eaf6; color: #3949ab; border-radius: 12px; font-size: 12px; }
 .item-meta-row .meta-chip.applicable { background: #f3e5f5; color: #7b1fa2; }
@@ -224,3 +230,30 @@ tr:hover { background: #f9f9f9; }
     .user-mgmt-table th, .user-mgmt-table td { padding: 8px; }
     .user-mgmt-table td .action-btns { flex-wrap: wrap; }
 }
+
+/* ============================================
+   项目页区块导航（长页面快速定位）
+   ============================================ */
+.section-nav {
+    position: sticky; top: 0; z-index: 60;
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 16px; padding: 8px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid #e0e0e0; border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.section-nav-btn {
+    padding: 6px 12px; border: 1px solid transparent; background: #f5f7fa;
+    border-radius: 6px; font-size: 13px; color: #555; cursor: pointer;
+    font-family: inherit; transition: all 0.15s;
+}
+.section-nav-btn:hover { background: #e8eaf6; color: #1a237e; }
+.section-nav-btn.active { background: #1a237e; color: #fff; }
+
+/* 指标弹窗快捷键提示 */
+.kbd-hint { font-size: 11px; color: #9e9e9e; margin-right: 6px; white-space: nowrap; }
+@media (max-width: 768px) {
+    .kbd-hint { display: none; }
+    .section-nav { top: auto; position: static; }
+}
+
