@@ -90,7 +90,15 @@ data_security/
 ├── start_server.py          # 一键启动器（本地HTTP服务+自动打开浏览器，可创建桌面快捷方式）
 ├── 启动系统.bat             # 双击即启动（推荐）
 ├── 创建桌面快捷方式.bat     # 双击一次，在桌面创建启动快捷方式
+├── deploy/                  # 服务器部署套件（阿里云 ECS）
+│   ├── nginx.conf           # Nginx 站点配置（Docker 与裸机共用）
+│   ├── Dockerfile           # 静态站点镜像
+│   ├── deploy.sh            # ECS 裸机一键部署脚本（安装 Nginx + 复制站点 + 放行端口）
+│   └── make_package.py      # 打包部署包（dist/data_security_site.tar.gz）
+├── docker-compose.yml       # Docker 一键起停（8080 → 容器 80）
+├── .dockerignore            # 构建上下文排除（含报告 PDF 等敏感文件）
 ├── docs/
+│   ├── 阿里云ECS部署指南.md             # 部署指南（三种方式/HTTPS/排错）
 │   ├── 数据安全评估准则导入设计.md      # 准则导入设计说明
 │   ├── 评估报告导入设计.md              # 报告 PDF 导入设计说明（版面解析/字段映射）
 │   ├── 系统优化说明.md                  # 性能与结构优化说明
@@ -129,6 +137,35 @@ python scripts/export_excel.py <项目JSON文件> [输出Excel路径]
 
 项目 JSON 文件可通过页面右上角「📦 备份数据」导出。
 
+## 部署到服务器（阿里云 ECS）
+
+系统是**纯静态站点**：无构建、无数据库、无后端进程，部署即"把文件放到 Web 目录"。
+完整步骤见 [阿里云ECS部署指南](docs/阿里云ECS部署指南.md)，最快路径：
+
+```powershell
+# 1) 本地打包（生成 dist/data_security_site.tar.gz，约 1.1MB）
+python deploy/make_package.py
+
+# 2) 上传到 ECS
+scp dist/data_security_site.tar.gz root@<ECS公网IP>:/root/
+```
+
+```bash
+# 3) 登录 ECS 一键部署（自动装 Nginx、复制站点、放行防火墙）
+ssh root@<ECS公网IP>
+tar -xzf data_security_site.tar.gz && cd data_security_site
+sudo bash deploy.sh 8080          # 端口可换成 80
+```
+
+部署后在**阿里云控制台安全组**入方向放行该端口，访问 `http://<ECS公网IP>:8080/`。
+
+已装 Docker 的服务器可直接 `docker compose up -d --build`（默认映射 8080）。
+
+> ⚠️ **数据存在浏览器 localStorage 中，不在服务器上**：任何电脑都能访问系统，
+> 但各浏览器数据互不相通；且 **localStorage 按访问地址隔离**——更换 IP/域名/端口前，
+> 请先用页面右上角「📦 备份数据」导出 JSON，换完再「📂 导入数据」恢复。
+> 若需要多人共用一份数据，需另行增加后端（账号 + 数据库）。
+
 ## 开发说明
 
 - **模板数据单一来源**：只维护 `data/template_data.json`，运行 `python scripts/sync_template.py` 生成浏览器端 `js/template.js`；
@@ -148,8 +185,12 @@ python scripts/export_excel.py <项目JSON文件> [输出Excel路径]
 python scripts/sync_template.py --check     # 模板数据源与生成文件是否一致
 node scripts/check_wiring.node.js           # HTML 事件处理函数是否都有定义
 node scripts/test_stats.node.js             # 统计/评分口径回归测试
-node scripts/test_report.node.js            # 报告生成回归测试（结论/整改清单/渲染）
-node scripts/test_report_import.node.js     # 报告 PDF 导入回归测试（端到端，真实报告）
-node scripts/test_criteria_import.node.js   # 准则 Excel 解析与映射回归测试
-node scripts/generate_sample_report.node.js # 生成示例报告（docs/示例报告_数据安全评估.html）
+node scripts/test_report.node.js            # 报告生成回归测试（结论/整改清单/渲染）※
+node scripts/test_report_import.node.js     # 报告 PDF 导入回归测试（端到端）※
+node scripts/test_criteria_import.node.js   # 准则 Excel 解析与映射回归测试 ※
+node scripts/generate_sample_report.node.js # 生成示例报告（docs/示例报告_数据安全评估.html）※
+python deploy/make_package.py               # 生成 ECS 部署包（dist/）
 ```
+
+> ※ 标记的脚本需要**真实样例数据**（《数据安全评估评估准则v1-20260525.xlsx》《数据安全风险评估报告v1.6.pdf》）。
+> 样例文件不属于仓库代码，放在项目根目录即可运行；缺失时脚本会打印 `SKIP` 并正常退出（退出码 0）。

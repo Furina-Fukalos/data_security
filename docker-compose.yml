@@ -1,0 +1,29 @@
+# ============================================================
+#  数据安全管理评估系统 —— Docker 一键部署
+#  在项目根目录执行：
+#      docker compose up -d --build        # 构建并启动
+#      docker compose logs -f              # 查看日志
+#      docker compose down                 # 停止并删除容器
+#
+#  访问地址： http://<ECS公网IP>:8080/
+#  改为标准 80 端口：把下面 ports 改成 "80:80"
+#  注意：中国大陆地域的 ECS，若要用「域名 + 80/443」对外访问需完成 ICP 备案；
+#        仅用「公网IP + 端口」访问则无需备案。两种方式都要在安全组放行端口。
+# ============================================================
+services:
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: data-security-eval:latest
+    container_name: data-security-eval
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/index.html"]
+      interval: 30s
+      timeout: 3s
+      retries: 3

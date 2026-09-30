@@ -1,0 +1,20 @@
+# Docker 构建上下文排除项（仅保留站点运行所需文件）
+.git
+.gitignore
+.trae
+docs/
+scripts/
+data/
+dist/
+node_modules/
+
+# 本地脚本与 Windows 启动器（镜像内用 nginx，不需要）
+start_server.py
+*.bat
+
+# 敏感资料：评估报告 / 调研表 / 评估表（勿打入镜像）
+*.pdf
+*.docx
+*.xlsx
+
+README.md

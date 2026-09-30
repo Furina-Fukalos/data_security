@@ -7,6 +7,15 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
+
+// 样例数据缺失时优雅跳过（样例文件不属于仓库，可能未随代码分发）
+const SAMPLE_XLSX = path.join(ROOT, '数据安全评估评估准则v1-20260525.xlsx');
+if (!fs.existsSync(SAMPLE_XLSX)) {
+    console.log('SKIP: 未找到样例文件 ' + path.basename(SAMPLE_XLSX));
+    console.log('      本脚本用真实准则数据生成示例报告；将样例文件放到项目根目录后可重跑。');
+    process.exit(0);
+}
+
 const Module = require('module');
 const _origLoad = Module._load;
 Module._load = function (request) {

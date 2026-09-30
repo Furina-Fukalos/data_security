@@ -7,6 +7,14 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 
+// 样例数据缺失时优雅跳过（样例报告不属于仓库，可能未随代码分发）
+const SAMPLE_PDF = path.join(ROOT, '数据安全风险评估报告v1.6.pdf');
+if (!fs.existsSync(SAMPLE_PDF)) {
+    console.log('SKIP: 未找到样例文件 ' + path.basename(SAMPLE_PDF));
+    console.log('      本测试用真实报告 PDF 做端到端校验；将样例文件放到项目根目录后可重跑。');
+    process.exit(0);
+}
+
 // ---- pdf.js（浏览器 UMD 版在 Node 下可用，需最小 DOM 桩）----
 global.window = global;
 global.document = {
